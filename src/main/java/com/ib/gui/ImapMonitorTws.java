@@ -489,9 +489,9 @@ public class ImapMonitorTws implements IConnectionHandler {
                                     Header h = e.nextElement();
                                     logger.debug("name {}", h.getName());
                                 }
-                                // get the actual Recommendation
                                 
-                                ArrayList<Contract> orders = getRecommendations((MimeMessage)msg);
+                                // find and process the individual Recommendation(s) in the msg
+                                process((MimeMessage)msg);
                                 //m_controller.openOrder(freq, contract, order, orderState);
 
                             }
@@ -511,9 +511,9 @@ public class ImapMonitorTws implements IConnectionHandler {
         }        
     }
 
-    public synchronized ArrayList<Contract> getRecommendations(Message msg) {
+    public synchronized void process(Message msg) {
         
-        ArrayList<Contract> contracts = new ArrayList<>();
+//        ArrayList<Contract> contracts = new ArrayList<>();
 
         MimeMessageParser parser = new MimeMessageParser((MimeMessage)msg);
         String htmlContent = parser.getHtmlContent();
@@ -561,13 +561,14 @@ public class ImapMonitorTws implements IConnectionHandler {
                                         System.out.println("Ticker Found : " + w);
                                         if (line.toLowerCase().contains("sell")) {
                                             StkContract stkContract = new StkContract(w);
-                                            //ApiDemo.INSTANCE.accountList().
-                                            Position position = ImapMonitorTws.INSTANCE.controller().findPosition(stkContract);
+                                            // Swing Object is the source of truth right now
+                                            Position position = m_acctInfoPanel.findPosition(stkContract);
+//                                            Position position = ImapMonitorTws.INSTANCE.controller().findPosition(stkContract);
                                             Order order = new Order();
                                             order.action(Types.Action.SELL);                                            
                                             order.totalQuantity(position.position());
                                             order.orderType(OrderType.MKT);
-//                                            m_controller.placeOrModifyOrder(stkContract, order, null);
+                                            m_controller.placeOrModifyOrder(stkContract, order, null);
 
                                             
                                             // Require Position from 'long store' PortfolioMap. Compare the Contract
@@ -588,7 +589,7 @@ public class ImapMonitorTws implements IConnectionHandler {
             logger.error("msg {}.", e, e);
         }
 
-        return contracts;
+        return;
     }
 
     @Override 
