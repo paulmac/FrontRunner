@@ -36,6 +36,7 @@ import com.ib.client.Contract;
 import com.ib.client.Order;
 import com.ib.client.OrderType;
 import com.ib.client.Types;
+import com.ib.contracts.OptContract;
 import com.ib.contracts.StkContract;
 //import com.ib.controller.ApiConnection;
 import com.ib.controller.Position;
@@ -53,9 +54,12 @@ import org.apache.commons.mail.util.*;
 //import org.apache.commons.lang3.StringUtils;
 
 import com.mongodb.MongoClient;
+import com.mongodb.client.MongoCollection;
 //import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import static com.mongodb.client.model.Filters.*;
+import java.time.Month;
+import java.time.Year;
 import org.bson.Document;
 
 //import com.mongodb.client.model.CreateCollectionOptions;
@@ -63,9 +67,11 @@ import org.bson.Document;
 //import com.paulmac.trade.ImapMonitor;
 import java.util.Calendar;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Properties;
 import java.util.Vector;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,20 +119,95 @@ public class ImapMonitorTws implements IConnectionHandler {
     static int attnum = 1;
     static int freq = 1000; // 0.5 second
     private static final String regex ="[A-Z]{3,4}"; //alpha uppercase
+    private static final String regExUpperCase = "([A-Z]{3,4})";
+    private static final Pattern upper3or4 = Pattern.compile(regExUpperCase);
+
 //    private boolean m_connected = false;
 
     // IMAP config
-    static String m_mbox = "INBOX"; // Should be something else
+    static String m_mbox; // = "INBOX"; // Should be something else
     private static IMAPFolder m_folder;
     static private String m_user;
     static private String m_password;
     static private String m_protocol;
     static private String m_host;
+    static private String m_provider_address; // = "paulmac1914@yahoo.com";
     static private int m_port;
     private boolean m_activated;
+    static private List<Document> m_subs;
     
     static private Properties m_props = System.getProperties();
-    
+
+    class SubDocument {
+	private String name;
+	private String displayName;
+	private String sellSubjectToken;
+	private String buySubjectToken;
+	private String sellOrderType;
+	private String buyOrderType;
+	private String orderToken;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public void setDisplayName(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getSellSubjectToken() {
+            return sellSubjectToken;
+        }
+
+        public void setSellSubjectToken(String sellSubjectToken) {
+            this.sellSubjectToken = sellSubjectToken;
+        }
+
+        public String getBuySubjectToken() {
+            return buySubjectToken;
+        }
+
+        public void setBuySubjectToken(String buySubjectToken) {
+            this.buySubjectToken = buySubjectToken;
+        }
+
+        public String getSellOrderType() {
+            return sellOrderType;
+        }
+
+        public void setSellOrderType(String sellOrderType) {
+            this.sellOrderType = sellOrderType;
+        }
+
+        public String getBuyOrderType() {
+            return buyOrderType;
+        }
+
+        public void setBuyOrderType(String buyOrderType) {
+            this.buyOrderType = buyOrderType;
+        }
+
+        public String getOrderToken() {
+            return orderToken;
+        }
+
+        public void setOrderToken(String orderToken) {
+            this.orderToken = orderToken;
+        }
+
+//        @Override
+//        public String toString() {
+//            return "MyDocument [id=" + id + ", name=" + name + "]";
+//        } 
+    }    
 //    SwingWorker werker = new SwingWorker<Boolean, Integer>() {
 //        
 //        @Override
@@ -255,9 +336,24 @@ public class ImapMonitorTws implements IConnectionHandler {
 
             // Create 1 SwingWorker to listen for each provider alert. Only agora for now
             Document provider = database.getCollection("providers").find().first();
-            System.out.println(provider.toJson());
-            Document emailConfig = database.getCollection("emailconfig").find(eq("provider", "gmail")).first();
-            System.out.println(emailConfig.toJson());
+            logger.info("Sub Provider {}", provider.toJson());
+            
+//            String m_provider = provider.getString("name");
+            m_provider_address = provider.getString("address");
+            m_mbox = provider.getString("mailbox");
+            m_subs = (List<Document>) provider.get("subs");
+            m_subs.forEach((sub) -> {
+                logger.info("sub : {} ", sub);
+            });
+            
+            
+//            subs.find(eq("displayName", 3)).first()
+//      password: "acmilan32",
+//      subs: [
+
+
+            Document emailConfig = database.getCollection("emailconfig").find(eq("provider", provider.getString("mailService"))).first();
+            logger.info("Email Config : {}", emailConfig.toJson());
             m_user = emailConfig.getString("user");
             m_password = emailConfig.getString("password");
             Document imapConfig = (Document)emailConfig.get("imap");
@@ -307,6 +403,8 @@ public class ImapMonitorTws implements IConnectionHandler {
                         // Simple method is call Folder.getMessageCount every 9 minutes. 
                         // If that still fails, reconnect.
                         ensureOpen(); // Just to make sure!
+                        
+                        // Choose 1 of these methods, no need for both
                         m_folder.getMessageCount();
                         m_folder.doCommand((IMAPProtocol p) -> {
                             p.simpleCommand("NOOP", null);
@@ -382,7 +480,7 @@ public class ImapMonitorTws implements IConnectionHandler {
 
     public void ensureOpen() {
                 
-        while (true) {
+        do {
             try {
                 if (m_folder != null) {
                     if (!m_folder.isOpen() ) { /* && (m_folder.getType() & Folder.HOLDS_MESSAGES) != 0 */
@@ -400,9 +498,9 @@ public class ImapMonitorTws implements IConnectionHandler {
             }
 
             openFolder();
-            if (m_folder.isOpen())
-                return;    
-        }
+//            if (m_folder.isOpen())
+//                return;    
+        } while (!m_folder.isOpen()); 
     }
 
     public void closeFolder() {
@@ -463,135 +561,197 @@ public class ImapMonitorTws implements IConnectionHandler {
             // Add messageCountListener to listen for new messages
             m_folder.addMessageCountListener(new MessageCountAdapter() {
                 @Override
-                public void messagesAdded(MessageCountEvent ev) {
-                    String from;
-                    String subject;
-                    String str;
+                /*synchronized*/ public void messagesAdded(MessageCountEvent ev) { // pmac : not sure if I can use synchronized here?
                     
-                    ensureOpen();
+                    // ensureOpen();  // pmac : not sure if necessary?
 
                     Message[] msgs = ev.getMessages();
                     for (Message msg : msgs) {
-                        try {
-                            str = "-----" + "\n";
-                            str += "Message " + msg.getMessageNumber() + ":";
-                            logger.debug(str);
-                            from = msg.getFrom()[0].toString();
-                            subject = msg.getSubject();
-                            logger.debug("From {}", from);
-                            logger.debug("Subject {}", subject);
-                            logger.debug("ContentType {}", msg.getContentType());
-                            if (subject.toLowerCase().contains("buy") || subject.toLowerCase().contains("sell")) {
-                                // indicative of a Buy or Sell Recommendation(s) embedded in the body
-                                if (msg.isMimeType(m_user));
-                                // Have a peek inside the headers
-                                for (Enumeration<Header> e = ((MimeMessage)msg).getAllHeaders(); e.hasMoreElements();) {
-                                    Header h = e.nextElement();
-                                    logger.debug("name {}", h.getName());
-                                }
-                                
-                                // find and process the individual Recommendation(s) in the msg
-                                process((MimeMessage)msg);
-                                //m_controller.openOrder(freq, contract, order, orderState);
+                        do { // keep trying to process same msg until finished i.e until folder is re-opened                                
+                            try {
+                                for (Document sub: m_subs) {
+//                                    m_subs.forEach((Document sub) -> {
+                                    InternetAddress address = (InternetAddress)msg.getFrom()[0];
+                                    if (address.getAddress().equals(m_provider_address))
 
+                                    if (sub.getString("displayName").equals(address.getPersonal())) {
+                                        String subject = msg.getSubject();
+                                        logger.info("Email arrived from : {}", address, "Subject : {}", subject);
+                                        if (address.getAddress().contains(m_provider_address) &&
+                                                (subject.contains(sub.getString("buySubjectToken")) ||
+                                                subject.contains(sub.getString("sellSubjectToken")))) {
+                                            // indicative of a Buy or Sell Recommendation(s) embedded in the body
+
+                                            // find and process the individual Recommendation(s) in the msg
+                                            process((MimeMessage)msg, sub);
+                                            //m_controller.openOrder(freq, contract, order, orderState);
+                                        }
+                                    }
+                                }    
+                            } catch (MessagingException me) {
+                                logger.error("msg {}.", me, me);
                             }
-                        } catch (MessagingException me) {
-                            logger.error("msg {}.", me, me);
-                            ensureOpen(); // recursive
-                        }
+                        } while (!m_folder.isOpen());
                     }
                 }
             });
 
-//          m_connected = true;
-//          startMsgProcessingThread();
         } catch (MessagingException me) {
             logger.error("msg {}.", me, me);
             ensureOpen(); // recursive
         }        
     }
 
-    public synchronized void process(Message msg) {
+    public synchronized void process(Message msg, Document sub) {
         
 //        ArrayList<Contract> contracts = new ArrayList<>();
-
-        MimeMessageParser parser = new MimeMessageParser((MimeMessage)msg);
-        String htmlContent = parser.getHtmlContent();
-        String plainContent = parser.getPlainContent();
         String line = "";
 
-        try {
-            Multipart multiPart = (Multipart) msg.getContent();
+        MimeMessageParser parser = new MimeMessageParser((MimeMessage)msg);
+//        String htmlContent = parser.getHtmlContent();
+//        String plainContent = parser.getPlainContent();
 
+//      if (msg.isMimeType(m_user));
+        // Have a peek inside the headers
+//        for (Enumeration<Header> e = ((MimeMessage)msg).getAllHeaders(); e.hasMoreElements();) {
+//            Header h = e.nextElement();
+//            logger.debug("name {}", h.getName());
+//        }
+
+        try {
+            
+            Multipart multiPart = (Multipart) msg.getContent();
+            
             for (int i = 0; i < multiPart.getCount(); i++) {
                 MimeBodyPart part = (MimeBodyPart) multiPart.getBodyPart(i);
                 if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) {
                     // this part is attachment
                     // code to save attachment...
+                    logger.info("Part : {}", part.getDisposition());
                 } else {
-                    boolean inSection = false;
-                    boolean tickerFound = false;
+//                    boolean inSection = false;
+//                    boolean tickerFound = false;
                     // this part may be the message content
-                    plainContent = part.getContent().toString();
+//                    String plainContent = part.getContent().toString();
+                    String orderToken = sub.getString("orderToken");
+                    String eomToken = sub.getString("eomToken");
+                    logger.info("MimeBodyPart part = {}", part.getContent().getClass());
                     BufferedReader reader = new BufferedReader(new InputStreamReader(part.getInputStream()));
-                    while (!inSection) { // reader.ready()
+                    do {
+//                        while (!inSection) { // reader.ready()
                         line = reader.readLine();
-                        if (line.contains("Recommendation:")) {
-                            inSection = true;
-                            break;
-                        }
-                    }
+                        logger.debug("Line : " + line);
+                        if (line.contains(orderToken)) {
+//                            inSection = true;
+//                            break;
 
-                    // Get started with the parsing
-//                    line = reader.readLine();
+                            // Get started with the parsing
 
-                    while (!tickerFound) {
-                        // continue reading until ticker found
-                        System.out.println("Line : " + line);
-//                        if (inSection) { // Look for Ticker
+        //                    while (!tickerFound) {
+                                // continue reading until ticker found
+        //                    if (inSection) { 
+                            // Read until Order line is found, can be same line, next line or line after a space
+                            while (!line.toLowerCase().contains("buy") && !line.toLowerCase().contains("sell"))
+                                line = reader.readLine();
+
+                            logger.info("OrderLine : " + line);
+
                             String[] words = line.split("\\P{Alpha}+"); //matches any non-alphabetic character
-                            for(String w:words){
-                                System.out.println(w);
-                                if (isUpperCase(w)) {
-                                    int length = w.length();
-                                    if ((length > 2) && (length < 5)) {
-                                        // Good chance it's a ticker. 
-                                        // TODO: If Sell need to verify against existing positions
-                                        tickerFound = true;
-                                        System.out.println("Ticker Found : " + w);
-                                        if (line.toLowerCase().contains("sell")) {
-                                            StkContract stkContract = new StkContract(w);
-                                            // Swing Object is the source of truth right now
-                                            Position position = m_acctInfoPanel.findPosition(stkContract);
-//                                            Position position = ImapMonitorTws.INSTANCE.controller().findPosition(stkContract);
-                                            Order order = new Order();
-                                            order.action(Types.Action.SELL);                                            
-                                            order.totalQuantity(position.position());
-                                            order.orderType(OrderType.MKT);
-                                            m_controller.placeOrModifyOrder(stkContract, order, null);
+//                            String w;
+                            
+                            if  (line.toLowerCase().contains("option")) {
+                                
+                                for (int j=0; j < words.length; j++) {
+                                    if (Pattern.matches("([A-Z]{3,4})", words[j])) {
+                                        
+                                        OptContract optContract = new OptContract(words[j++]); // ticker
+    //    Obtain : lastTradeDateOrContractMonth, double strike, String right) {
+                                        Month month = Month.valueOf(words[j++].toUpperCase());                                    // Look for : month Year Strike Right
+                                        Year year = Year.of(Integer.getInteger(words[j++]).intValue());
 
-                                            
-                                            // Require Position from 'long store' PortfolioMap. Compare the Contract
-                                            
-                                            //contracts.add(new StkContract(w));
-                                        }
+                                        String strike = words[j++];
+                                        if (strike.contains("$"))
+                                            strike = strike.substring(1); // remove $ char
+                                        String right = words[++j];
+                                        // Look for : month Year Strike Right
+
+                                    }
+                                }
+                            } else {
+                                for (String w:words) {                                    
+                                    if (Pattern.matches("([A-Z]{3,4})", w)) {
+                                        StkContract stkContract = new StkContract(w);
+                                        // Swing Object is the source of truth right now
+                                        Position position = m_acctInfoPanel.findPosition(stkContract);
+    //                                            Position position = ImapMonitorTws.INSTANCE.controller().findPosition(stkContract);
+                                        Order order = new Order();
+                                        order.action(Types.Action.SELL);                                            
+                                        order.totalQuantity(position.position());
+                                        order.orderType(OrderType.MKT);
+                                        m_controller.placeOrModifyOrder(stkContract, order, null);
                                         break;
                                     }
                                 }
-                            }
-                            
-                        // Continue to read email
-                        line = reader.readLine();
-                    }
+                            }                                            // Require Position from 'long store' PortfolioMap. Compare the Contract
+
+                        } // if (line.contains(orderToken))
+                         // Continue to read email
+                    } while (!line.contains(eomToken));                
                 }
             }
         } catch (MessagingException | IOException e) {
             logger.error("msg {}.", e, e);
+        } finally { 
+            logger.info("Finisned processing msg from : {}", sub.get("displayName"));
         }
-
-        return;
     }
 
+
+
+//                                // Good chance it's a ticker. 
+//                                // TODO: If Sell need to verify against existing positions
+//    //                            tickerFound = true;
+//                                logger.info("Ticker Found : " + w);
+//                                if (line.toLowerCase().contains("sell")) {
+//                                    if  (line.toLowerCase().contains("option")) {
+//                                        OptContract optContract = new OptContract(w);
+//    //    Obtain : lastTradeDateOrContractMonth, double strike, String right) {
+//                                        Month month = Month.valueOf(words[++j].toUpperCase());                                    // Look for : month Year Strike Right
+//                                        Year year = Year.of(Integer.getInteger(words[++j]).intValue());
+//                                        String strike = words[++j];
+//                                        if (strike.contains("$"))
+//                                            strike = strike.substring(1); // remove $ char
+//                                        String right = words[++j];
+//                                        // Look for : month Year Strike Right
+//
+//                                    } else {
+//                                        StkContract stkContract = new StkContract(w);
+//                                        // Swing Object is the source of truth right now
+//                                        Position position = m_acctInfoPanel.findPosition(stkContract);
+//    //                                            Position position = ImapMonitorTws.INSTANCE.controller().findPosition(stkContract);
+//                                        Order order = new Order();
+//                                        order.action(Types.Action.SELL);                                            
+//                                        order.totalQuantity(position.position());
+//                                        order.orderType(OrderType.MKT);
+//                                        m_controller.placeOrModifyOrder(stkContract, order, null);
+//
+//                                    }                                            // Require Position from 'long store' PortfolioMap. Compare the Contract
+
+                                    //contracts.add(new StkContract(w));
+//                                } else if (line.toLowerCase().contains("buy")) {
+//
+//                                }
+//                                break;
+//                            }
+ 
+////        return;
+
+//    public void getContent(Message message) throws MessagingException, IOException
+//{
+//    
+//}
+    
+    
     @Override 
     public void connected() {
         logger.info("Connected to TWS");

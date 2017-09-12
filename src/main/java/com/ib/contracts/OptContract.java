@@ -21,6 +21,13 @@ public class OptContract extends Contract {
         right(right);
     }
     
+    public OptContract(String symbol) {
+        this.symbol(symbol);
+        this.exchange("SMART");
+        currency("USD");
+    }
+
+    
         @Override
     public boolean equals(Object obj) {
     
