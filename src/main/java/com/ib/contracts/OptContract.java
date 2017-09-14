@@ -22,6 +22,7 @@ public class OptContract extends Contract {
     }
     
     public OptContract(String symbol) {
+        secType(SecType.OPT.name());
         this.symbol(symbol);
         this.exchange("SMART");
         currency("USD");
@@ -42,10 +43,38 @@ public class OptContract extends Contract {
         Contract other = (Contract)obj;
         
         // Light comparison
-        return this.symbol().equals(other.symbol()) && 
-                this.lastTradeDateOrContractMonth().equals(other.lastTradeDateOrContractMonth())&&
+        if (this.symbol().equals(other.symbol()) &&
+                // The Day section has no significance
+                this.lastTradeDateOrContractMonth().regionMatches(0, other.lastTradeDateOrContractMonth(), 0, 6) &&
                 this.right().equals(other.right())&&
-                this.secType().equals(other.secType());
+                this.secType().equals(other.secType())) {
+            this.lastTradeDateOrContractMonth(other.lastTradeDateOrContractMonth()); // fix it up
+            return true;
+        }
+        
+        return false;
+    }
+
+    @Override 
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+
+        add( sb, "conid", conid());
+        add( sb, "symbol", symbol());
+        add( sb, "secType", secType());
+        add( sb, "lastTradeDateOrContractMonth", this.lastTradeDateOrContractMonth());
+        add( sb, "strike", strike());
+        add( sb, "right", right());
+//        add( sb, "multiplier", m_multiplier);
+        add( sb, "exchange", exchange());
+        add( sb, "currency", currency());
+//        add( sb, "localSymbol", m_localSymbol);
+//        add( sb, "tradingClass", m_tradingClass);
+//        add( sb, "primaryExch", m_primaryExch);
+//        add( sb, "secIdType", m_secIdType);
+//        add( sb, "secId", m_secId);
+
+        return sb.toString();
     }
 
 }

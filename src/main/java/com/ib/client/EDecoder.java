@@ -17,6 +17,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 class EDecoder implements ObjectInput {
     // incoming msg id's
     private static final int END_CONN           = -1;
@@ -91,17 +94,19 @@ class EDecoder implements ObjectInput {
     private EClientMsgSink m_clientMsgSink;
     private EWrapper m_EWrapper;
     private int m_serverVersion;
-	private IMessageReader m_messageReader;
+    private IMessageReader m_messageReader;
+        
+    final static Logger logger = LoggerFactory.getLogger(EReader.class);
 
-	public EDecoder(int serverVersion, EWrapper callback) {
-		this(serverVersion, callback, null);
-	}
-	
-	public EDecoder(int serverVersion, EWrapper callback, EClientMsgSink sink) {
-		m_clientMsgSink = sink;
-		m_serverVersion = serverVersion;
-		m_EWrapper = callback;
-	}
+    public EDecoder(int serverVersion, EWrapper callback) {
+        this(serverVersion, callback, null);
+    }
+
+    public EDecoder(int serverVersion, EWrapper callback, EClientMsgSink sink) {
+        m_clientMsgSink = sink;
+        m_serverVersion = serverVersion;
+        m_EWrapper = callback;
+    }
 	
     private void processFirstMsg() throws IOException {
         m_serverVersion = readInt();
@@ -110,28 +115,27 @@ class EDecoder implements ObjectInput {
         if( m_serverVersion == REDIRECT_MSG_ID ) {
             String newAddress = readStr();
 
-            m_serverVersion = 0;
-            
-            if (m_clientMsgSink != null)
-            	m_clientMsgSink.redirect(newAddress);
+        m_serverVersion = 0;
+
+        if (m_clientMsgSink != null)
+            m_clientMsgSink.redirect(newAddress);
         	
-        	return;
-        }
+        return;
+    }
        
-        
-		if (m_serverVersion >= 20) {
-			// currently with Unified both server version and time sent in one
-			// message
-			String twsTime = readStr();
-			
-			if (m_clientMsgSink != null)
-				m_clientMsgSink.serverVersion(m_serverVersion, twsTime);
-		} else {
-			if (m_clientMsgSink != null)
-				m_clientMsgSink.serverVersion(m_serverVersion, null);
-		}
-		
-		m_EWrapper.connectAck();
+    if (m_serverVersion >= 20) {
+        // currently with Unified both server version and time sent in one
+        // message
+        String twsTime = readStr();
+
+        if (m_clientMsgSink != null)
+                m_clientMsgSink.serverVersion(m_serverVersion, twsTime);
+        } else {
+            if (m_clientMsgSink != null)
+                    m_clientMsgSink.serverVersion(m_serverVersion, null);
+        }
+
+        m_EWrapper.connectAck();
     } 
     
     private boolean readMessageToInternalBuf(InputStream dis) {
@@ -151,6 +155,8 @@ class EDecoder implements ObjectInput {
     	}
     	
     	int msgId = readInt();
+        
+        logger.info("Process MsgId: {}", msgId);
 
         switch( msgId) {
             case END_CONN:

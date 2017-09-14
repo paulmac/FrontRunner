@@ -9,8 +9,9 @@ import java.util.Arrays;
 import java.util.Deque;
 import java.util.LinkedList;
 
-
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+    
 /**
  * This class reads commands from TWS and passes them to the user defined
  * EWrapper.
@@ -28,12 +29,15 @@ public class EReader extends Thread {
     private int m_iBufLen = 0;
     private Deque<EMessage> m_msgQueue = new LinkedList<>();
     
-    protected boolean isUseV100Plus() {
-		return m_clientSocket.isUseV100Plus();
-	}
+    final static Logger logger = LoggerFactory.getLogger(EReader.class);
 
-	protected EClient parent()    { return m_clientSocket; }
-    private EWrapper eWrapper()         { return parent().wrapper(); }
+    
+    protected boolean isUseV100Plus() {
+	return m_clientSocket.isUseV100Plus();
+    }
+
+    protected EClient parent()    { return m_clientSocket; }
+    private EWrapper eWrapper()   { return parent().wrapper(); }
 
     /**
      * Construct the EReader.
@@ -104,7 +108,10 @@ public class EReader extends Thread {
     }
     
     public void processMsgs() throws IOException {
+        
     	EMessage msg = getMsg();
+        
+//        logger.info("Process Msg: {}", msg);
     	
     	while (msg != null && m_processMsgsDecoder.processMsg(msg) > 0) {
     		msg = getMsg();

@@ -58,14 +58,17 @@ import com.mongodb.client.MongoCollection;
 //import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import static com.mongodb.client.model.Filters.*;
+import java.text.SimpleDateFormat;
 import java.time.Month;
 import java.time.Year;
+import java.util.Arrays;
 import org.bson.Document;
 
 //import com.mongodb.client.model.CreateCollectionOptions;
 //import com.mongodb.client.model.ValidationOptions;
 //import com.paulmac.trade.ImapMonitor;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Properties;
@@ -121,6 +124,7 @@ public class ImapMonitorTws implements IConnectionHandler {
     private static final String regex ="[A-Z]{3,4}"; //alpha uppercase
     private static final String regExUpperCase = "([A-Z]{3,4})";
     private static final Pattern upper3or4 = Pattern.compile(regExUpperCase);
+    private static final List<String> m_excludes = Arrays.asList("NYSE", "NASD", "sup3"); 
 
 //    private boolean m_connected = false;
 
@@ -605,7 +609,7 @@ public class ImapMonitorTws implements IConnectionHandler {
     public synchronized void process(Message msg, Document sub) {
         
 //        ArrayList<Contract> contracts = new ArrayList<>();
-        String line = "";
+        
 
         MimeMessageParser parser = new MimeMessageParser((MimeMessage)msg);
 //        String htmlContent = parser.getHtmlContent();
@@ -633,15 +637,24 @@ public class ImapMonitorTws implements IConnectionHandler {
 //                    boolean tickerFound = false;
                     // this part may be the message content
 //                    String plainContent = part.getContent().toString();
+                    String line = null;
                     String orderToken = sub.getString("orderToken");
                     String eomToken = sub.getString("eomToken");
                     logger.info("MimeBodyPart part = {}", part.getContent().getClass());
                     BufferedReader reader = new BufferedReader(new InputStreamReader(part.getInputStream()));
+
                     do {
 //                        while (!inSection) { // reader.ready()
+                        Contract con = null; // Contract created for each Recomendation or "Order Line"
+                        Order order = null;
+
                         line = reader.readLine();
-                        logger.debug("Line : " + line);
+                        logger.info("Line : " + line);
                         if (line.contains(orderToken)) {
+                            
+                            order = new Order();
+                            order.action(Types.Action.SSHORT); // Pmac: Should modify also in Ctor?
+
 //                            inSection = true;
 //                            break;
 
@@ -651,55 +664,78 @@ public class ImapMonitorTws implements IConnectionHandler {
                                 // continue reading until ticker found
         //                    if (inSection) { 
                             // Read until Order line is found, can be same line, next line or line after a space
-                            while (!line.toLowerCase().contains("buy") && !line.toLowerCase().contains("sell"))
-                                line = reader.readLine();
+                             while (order.action().equals(Types.Action.SSHORT)) {
+                                if (line.toLowerCase().contains("buy"))
+                                    order.action(Types.Action.BUY);
+                                else if (line.toLowerCase().contains("sell"))
+                                    order.action(Types.Action.SELL);
+                                else
+                                    line = reader.readLine();
+                            }
 
-                            logger.info("OrderLine : " + line);
+                            logger.info("{} Order: {} ", order.action(), line);
 
-                            String[] words = line.split("\\P{Alpha}+"); //matches any non-alphabetic character
-//                            String w;
-                            
                             if  (line.toLowerCase().contains("option")) {
                                 
+                                String[] words = line.split("[^a-zA-Z0-9']+"); // \\P{Alpha}+ matches any non-alphabetic character
+                            
                                 for (int j=0; j < words.length; j++) {
-                                    if (Pattern.matches("([A-Z]{3,4})", words[j])) {
+                                    String w =  words[j];
+                                    if (Pattern.matches("([A-Z]{3,4})", w)) {
+                                        String t = words[j++];
                                         
-                                        OptContract optContract = new OptContract(words[j++]); // ticker
+                                        con = new OptContract(t); // ticker
     //    Obtain : lastTradeDateOrContractMonth, double strike, String right) {
-                                        Month month = Month.valueOf(words[j++].toUpperCase());                                    // Look for : month Year Strike Right
-                                        Year year = Year.of(Integer.getInteger(words[j++]).intValue());
+                                        String m = words[j++];
+                                        Month month = Month.valueOf(m.toUpperCase());
+                                        String y = words[j++];
+                                        Year year = Year.of(new Integer(y));
+                                        Calendar c = Calendar.getInstance();
+                                        c.set(year.getValue(), month.ordinal(), 15, 0, 0);  
+                                        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
+//                                        Date lastTradeDateOrContractMonth = new Date(year.getValue(), month.getValue(), 15);
+                                        con.lastTradeDateOrContractMonth(sdf.format(c.getTime()));
 
-                                        String strike = words[j++];
-                                        if (strike.contains("$"))
-                                            strike = strike.substring(1); // remove $ char
-                                        String right = words[++j];
+                                        con.strike(new Double(words[j++]));
+//                                        w = words[j];
+                                        con.right(words[j++].toUpperCase());
+                                        logger.info("Option Contract: {}", con);
+//                                        String s = words[j++];
+//                                        if (s.contains("$"))
+//                                            s = s.substring(1); // remove $ char
+//                                        String r = words[++j];
                                         // Look for : month Year Strike Right
 
                                     }
                                 }
                             } else {
+                                String[] words = line.split("\\P{Alpha}+"); // matches any non-alphabetic character
                                 for (String w:words) {                                    
-                                    if (Pattern.matches("([A-Z]{3,4})", w)) {
-                                        StkContract stkContract = new StkContract(w);
+                                    if (Pattern.matches("([A-Z]{2,4})", w) && !m_excludes.contains(w)) {
+                                        con = new StkContract(w);
                                         // Swing Object is the source of truth right now
-                                        Position position = m_acctInfoPanel.findPosition(stkContract);
-    //                                            Position position = ImapMonitorTws.INSTANCE.controller().findPosition(stkContract);
-                                        Order order = new Order();
-                                        order.action(Types.Action.SELL);                                            
-                                        order.totalQuantity(position.position());
-                                        order.orderType(OrderType.MKT);
-                                        m_controller.placeOrModifyOrder(stkContract, order, null);
                                         break;
                                     }
                                 }
                             }                                            // Require Position from 'long store' PortfolioMap. Compare the Contract
 
-                        } // if (line.contains(orderToken))
-                         // Continue to read email
+                            if (order.action().equals(Types.Action.SELL)) { 
+                                Position position = m_acctInfoPanel.findPosition(con);
+//                                order.action(Types.Action.SELL);                                            
+                                order.totalQuantity(position.position());
+                                order.orderType(OrderType.MKT);
+                            } else {
+                                logger.info("Buy Order not implemented!");
+                            }
+                            
+                            m_controller.placeOrModifyOrder(con, order, null);
+
+                        } // if (line.contains(orderToken))                        
+                    // Continue until "end of mail"
                     } while (!line.contains(eomToken));                
                 }
             }
-        } catch (MessagingException | IOException e) {
+        } catch (IOException | NumberFormatException | MessagingException e) {
             logger.error("msg {}.", e, e);
         } finally { 
             logger.info("Finisned processing msg from : {}", sub.get("displayName"));
@@ -788,13 +824,14 @@ public class ImapMonitorTws implements IConnectionHandler {
     }
 
     @Override public void show( final String str) {
-            SwingUtilities.invokeLater(() -> {
-                m_msg.append(str);
-                m_msg.append( "\n\n");
-                
-                Dimension d = m_msg.getSize();
-                m_msg.scrollRectToVisible( new Rectangle( 0, d.height, 1, 1) );
-            });
+        logger.info("Show: {}", str);
+        SwingUtilities.invokeLater(() -> {
+            m_msg.append(str);
+            m_msg.append( "\n\n");
+
+            Dimension d = m_msg.getSize();
+            m_msg.scrollRectToVisible( new Rectangle( 0, d.height, 1, 1) );
+        });
     }
 
     @Override public void error(Exception e) {
