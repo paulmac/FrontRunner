@@ -199,7 +199,8 @@ public class Contract implements Cloneable {
         return result;
     }
 
-    /** Returns a text description that can be used for display. */
+    /** Returns a text description that can be used for display.
+     * @return  */
     public String description() {
         StringBuilder sb = new StringBuilder();
 

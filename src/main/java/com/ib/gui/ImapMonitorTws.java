@@ -58,6 +58,7 @@ import com.mongodb.client.MongoCollection;
 //import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import static com.mongodb.client.model.Filters.*;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.time.Month;
 import java.time.Year;
@@ -75,6 +76,8 @@ import java.util.Properties;
 import java.util.Vector;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
+import java.util.stream.Stream;
+import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -141,138 +144,13 @@ public class ImapMonitorTws implements IConnectionHandler {
     static private List<Document> m_subs;
     
     static private Properties m_props = System.getProperties();
-
-    class SubDocument {
-	private String name;
-	private String displayName;
-	private String sellSubjectToken;
-	private String buySubjectToken;
-	private String sellOrderType;
-	private String buyOrderType;
-	private String orderToken;
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        public void setDisplayName(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getSellSubjectToken() {
-            return sellSubjectToken;
-        }
-
-        public void setSellSubjectToken(String sellSubjectToken) {
-            this.sellSubjectToken = sellSubjectToken;
-        }
-
-        public String getBuySubjectToken() {
-            return buySubjectToken;
-        }
-
-        public void setBuySubjectToken(String buySubjectToken) {
-            this.buySubjectToken = buySubjectToken;
-        }
-
-        public String getSellOrderType() {
-            return sellOrderType;
-        }
-
-        public void setSellOrderType(String sellOrderType) {
-            this.sellOrderType = sellOrderType;
-        }
-
-        public String getBuyOrderType() {
-            return buyOrderType;
-        }
-
-        public void setBuyOrderType(String buyOrderType) {
-            this.buyOrderType = buyOrderType;
-        }
-
-        public String getOrderToken() {
-            return orderToken;
-        }
-
-        public void setOrderToken(String orderToken) {
-            this.orderToken = orderToken;
-        }
-
-//        @Override
-//        public String toString() {
-//            return "MyDocument [id=" + id + ", name=" + name + "]";
-//        } 
-    }    
-//    SwingWorker werker = new SwingWorker<Boolean, Integer>() {
-//        
-//        @Override
-//        protected Boolean doInBackground() throws Exception {
-//
-//            boolean activated = false;
-//            try {
-//                // Need to poke (once) the AccountInfoPanel to request account Positions from TWS
-//                if ((m_acctList.size() == 1) && !activated) {
-//                    synchronized(this){
-//                        this.wait(5000); // 5 secs to allow TWS to connect before poking it
-//                        m_acctInfoPanel.activated();
-//                        activated = true;
-//                    }
-//                }
-//
-//                for (;;) {
-//                        m_folder.idle(); 
-//                        System.out.println("IDLE done");
-//                }
-//            } catch (FolderClosedException fex) {
-//                // gmail may periodically close the connection, so lets reconnect ...
-//                m_connected = false;
-//            
-//                System.out.println("Should be : throw fex;");
-//                java.util.logging.Logger.getLogger(ImapMonitor.class.getName()).log(Level.SEVERE, null, fex);
-////            } catch (MessagingException mex) {
-////                supportsIdle = false;
-//            } catch (Exception ex) {
-//                java.util.logging.Logger.getLogger(ImapMonitor.class.getName()).log(Level.SEVERE, null, ex);
-//            }
-//        
-//            // Value transmitted to done(). Shouldn't reach here
-//            return true;
-//        }
-//
-//        @Override
-//        protected void process(List<Integer> chunks) {
-//            // Process results
-//        }
-//
-//        @Override
-//        protected void done() {
-//                // Finish sequence
-//        }
-//    };
-
+       
     // getter methods
     public ArrayList<String> accountList()  { return m_acctList; }
     public JFrame frame()                   { return m_frame; }
     public ILogger getInLogger()            { return m_inLogger; }
     public ILogger getOutLogger()           { return m_outLogger; }
 
-//    static void log(Object obj, String msg) {
-//        java.util.logging.Logger.getLogger(obj.getClass().getName()).log(Level.INFO, Thread.currentThread().getName()+" : "+msg);
-//    }
-//    
-//    static void log(Object obj, Exception e) {
-//        java.util.logging.Logger.getLogger(obj.getClass().getName()).log(Level.SEVERE, Thread.currentThread().getName(), e);
-//    }
-//    
     public static boolean isUpperCase(String str){
         return Pattern.compile(regex).matcher(str).find();
     }
@@ -494,16 +372,15 @@ public class ImapMonitorTws implements IConnectionHandler {
                             throw new FolderClosedException(m_folder);
                     }
 
-                    logger.info("In ensureOpen(). Folder {} is still Open.", m_folder);                    
+                    logger.info("In ensureOpen(). Folder {} is still Open.", m_folder, " @ ", Calendar.getInstance().getTime());                    
                     return;
                 }
             } catch (MessagingException e) {
-                logger.error("msg {}.", e, e);
+                logger.error("msg {}.", e.toString(), e);
             }
-
+            // If all else fails .....
             openFolder();
-//            if (m_folder.isOpen())
-//                return;    
+
         } while (!m_folder.isOpen()); 
     }
 
@@ -522,21 +399,7 @@ public class ImapMonitorTws implements IConnectionHandler {
         }
     }
 
-//    public void listen() {
-//        werker.execute();
-//        synchronized(this){
-//            try {
-//                this.wait(5000); // 5 secs to allows TWS to connect before poking it again
-////                werker.process(null);
-//            } catch (InterruptedException ex) {
-//                Logger.getLogger(ImapMonitor.class.getName()).log(Level.SEVERE, null, ex);
-//            }
-//        }
-//    }
-
-//
 //    Stuff to do with actually processing of incoming mail
-//
     public void openFolder() {
         try {              
             logger.info("Entering openFolder()");
@@ -565,7 +428,8 @@ public class ImapMonitorTws implements IConnectionHandler {
             // Add messageCountListener to listen for new messages
             m_folder.addMessageCountListener(new MessageCountAdapter() {
                 @Override
-                /*synchronized*/ public void messagesAdded(MessageCountEvent ev) { // pmac : not sure if I can use synchronized here?
+                /* Attempting to block the Folder Closed exceptyion with Synchronized*/ 
+                public synchronized void messagesAdded(MessageCountEvent ev) { // pmac : not sure if I can use synchronized here?
                     
                     // ensureOpen();  // pmac : not sure if necessary?
 
@@ -573,27 +437,26 @@ public class ImapMonitorTws implements IConnectionHandler {
                     for (Message msg : msgs) {
                         do { // keep trying to process same msg until finished i.e until folder is re-opened                                
                             try {
-                                for (Document sub: m_subs) {
-//                                    m_subs.forEach((Document sub) -> {
-                                    InternetAddress address = (InternetAddress)msg.getFrom()[0];
-                                    if (address.getAddress().equals(m_provider_address))
-
-                                    if (sub.getString("displayName").equals(address.getPersonal())) {
-                                        String subject = msg.getSubject();
-                                        logger.info("Email arrived from : {}", address, "Subject : {}", subject);
-                                        if (address.getAddress().contains(m_provider_address) &&
-                                                (subject.contains(sub.getString("buySubjectToken")) ||
-                                                subject.contains(sub.getString("sellSubjectToken")))) {
-                                            // indicative of a Buy or Sell Recommendation(s) embedded in the body
-
+                                InternetAddress email = (InternetAddress)msg.getFrom()[0];
+                                String subject = msg.getSubject();
+                                String address = email.getAddress();
+                                String personal = StringUtils.replacePattern(email.getPersonal(), "[^a-zA-Z0-9.\\ ]+", ""); // to remove ambiguous ' or ’ 
+                                logger.info("Email arrived from : [{}] <{}> with Subject: {}", personal, address, subject);
+                                if (address.equals(m_provider_address)) {
+                                    for (Document sub: m_subs) {
+                                         // indicative of a Buy or Sell Recommendation(s) embedded in the body
+                                        String displayName = StringUtils.replacePattern(sub.getString("displayName"), "[^a-zA-Z0-9.\\ ]+", "");
+                                        if ((StringUtils.equals(personal, displayName))&& 
+                                                subject.contains(sub.getString("sellSubjectToken")) || 
+                                                subject.contains(sub.getString("buySubjectToken"))) {
                                             // find and process the individual Recommendation(s) in the msg
                                             process((MimeMessage)msg, sub);
-                                            //m_controller.openOrder(freq, contract, order, orderState);
+                                            return;
                                         }
                                     }
-                                }    
+                                }
                             } catch (MessagingException me) {
-                                logger.error("msg {}.", me, me);
+                                logger.error("msg {}.", me,toString(), me);
                             }
                         } while (!m_folder.isOpen());
                     }
@@ -601,29 +464,13 @@ public class ImapMonitorTws implements IConnectionHandler {
             });
 
         } catch (MessagingException me) {
-            logger.error("msg {}.", me, me);
+            logger.error("msg {}.", me,toString(), me);
             ensureOpen(); // recursive
         }        
     }
 
-    public synchronized void process(Message msg, Document sub) {
-        
-//        ArrayList<Contract> contracts = new ArrayList<>();
-        
-
-        MimeMessageParser parser = new MimeMessageParser((MimeMessage)msg);
-//        String htmlContent = parser.getHtmlContent();
-//        String plainContent = parser.getPlainContent();
-
-//      if (msg.isMimeType(m_user));
-        // Have a peek inside the headers
-//        for (Enumeration<Header> e = ((MimeMessage)msg).getAllHeaders(); e.hasMoreElements();) {
-//            Header h = e.nextElement();
-//            logger.debug("name {}", h.getName());
-//        }
-
-        try {
-            
+    public /* synchronized */ void process(Message msg, Document sub) {        
+        try {            
             Multipart multiPart = (Multipart) msg.getContent();
             
             for (int i = 0; i < multiPart.getCount(); i++) {
@@ -637,55 +484,55 @@ public class ImapMonitorTws implements IConnectionHandler {
 //                    boolean tickerFound = false;
                     // this part may be the message content
 //                    String plainContent = part.getContent().toString();
+                    Contract con = null; // Contract created for each Recomendation or "Order Line"
+                    Order order = null;
                     String line = null;
+                    int lnctr = 0;
+                    String orderStr = null;
                     String orderToken = sub.getString("orderToken");
                     String eomToken = sub.getString("eomToken");
-                    logger.info("MimeBodyPart part = {}", part.getContent().getClass());
                     BufferedReader reader = new BufferedReader(new InputStreamReader(part.getInputStream()));
 
                     do {
-//                        while (!inSection) { // reader.ready()
-                        Contract con = null; // Contract created for each Recomendation or "Order Line"
-                        Order order = null;
-
                         line = reader.readLine();
-                        logger.info("Line : " + line);
-                        if (line.contains(orderToken)) {
+                        logger.info("Line {} : {}", lnctr++, line);
+
+                        // Keep reading until line contains an Order Token
+                        if  (StringUtils.containsIgnoreCase(line, orderToken)) { // containsorderStr.toLowerCase().contains("option")) {
+
+                            con = null; // Contract created for each Recomendation or "Order Line"
                             
                             order = new Order();
                             order.action(Types.Action.SSHORT); // Pmac: Should modify also in Ctor?
 
-//                            inSection = true;
-//                            break;
-
-                            // Get started with the parsing
-
-        //                    while (!tickerFound) {
-                                // continue reading until ticker found
-        //                    if (inSection) { 
+                            // SB initialised with rest of line ( omitting Order Token itself)
+                            StringBuffer sb = new StringBuffer(line.substring(orderToken.length())); 
                             // Read until Order line is found, can be same line, next line or line after a space
                              while (order.action().equals(Types.Action.SSHORT)) {
-                                if (line.toLowerCase().contains("buy"))
+                                if (StringUtils.containsIgnoreCase(line, "buy"))
                                     order.action(Types.Action.BUY);
-                                else if (line.toLowerCase().contains("sell"))
+                                else if (StringUtils.containsIgnoreCase(line, "sell"))
                                     order.action(Types.Action.SELL);
-                                else
-                                    line = reader.readLine();
+                                
+                                // Do this anyway as the 'option' keyword might be on the next line
+                                line = reader.readLine();
+                                if (StringUtils.isNotBlank(line))
+                                    sb.append(line);                                
                             }
 
-                            logger.info("{} Order: {} ", order.action(), line);
+                            orderStr = sb.toString();
+                            logger.info("{} Order: {} ", order.action(), orderStr);
 
-                            if  (line.toLowerCase().contains("option")) {
+                            if  (StringUtils.containsIgnoreCase(orderStr, "option")) { // containsorderStr.toLowerCase().contains("option")) {
                                 
-                                String[] words = line.split("[^a-zA-Z0-9']+"); // \\P{Alpha}+ matches any non-alphabetic character
+                                String[] words = orderStr.split("[^a-zA-Z0-9.']+"); // \\P{Alpha}+ matches any non-alphabetic character '.' is for a possible decimal point
                             
                                 for (int j=0; j < words.length; j++) {
-                                    String w =  words[j];
-                                    if (Pattern.matches("([A-Z]{3,4})", w)) {
-                                        String t = words[j++];
+//                                    String w =  words[j];
+                                    if (Pattern.matches("([A-Z]{2,4})", words[j])) {
                                         
-                                        con = new OptContract(t); // ticker
-    //    Obtain : lastTradeDateOrContractMonth, double strike, String right) {
+                                        con = new OptContract(words[j++]); // ticker
+                                        // Obtain : lastTradeDateOrContractMonth, double strike, String right) {
                                         String m = words[j++];
                                         Month month = Month.valueOf(m.toUpperCase());
                                         String y = words[j++];
@@ -693,7 +540,6 @@ public class ImapMonitorTws implements IConnectionHandler {
                                         Calendar c = Calendar.getInstance();
                                         c.set(year.getValue(), month.ordinal(), 15, 0, 0);  
                                         SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
-//                                        Date lastTradeDateOrContractMonth = new Date(year.getValue(), month.getValue(), 15);
                                         con.lastTradeDateOrContractMonth(sdf.format(c.getTime()));
 
                                         con.strike(new Double(words[j++]));
@@ -709,26 +555,32 @@ public class ImapMonitorTws implements IConnectionHandler {
                                     }
                                 }
                             } else {
-                                String[] words = line.split("\\P{Alpha}+"); // matches any non-alphabetic character
+                                String[] words = orderStr.split("\\P{Alpha}+"); // matches any non-alphabetic character
                                 for (String w:words) {                                    
                                     if (Pattern.matches("([A-Z]{2,4})", w) && !m_excludes.contains(w)) {
                                         con = new StkContract(w);
-                                        // Swing Object is the source of truth right now
                                         break;
                                     }
                                 }
-                            }                                            // Require Position from 'long store' PortfolioMap. Compare the Contract
+                            }                                            
 
-                            if (order.action().equals(Types.Action.SELL)) { 
+                            if (order.action().equals(Types.Action.SELL)) {
+                                // Require Position from 'long store' PortfolioMap. Compare the Contract 
                                 Position position = m_acctInfoPanel.findPosition(con);
-//                                order.action(Types.Action.SELL);                                            
-                                order.totalQuantity(position.position());
-                                order.orderType(OrderType.MKT);
+                                if (position != null) {
+                                    order.totalQuantity(position.position());
+                                    order.orderType(OrderType.MKT);
+                                    logger.info("Sell {} of {}", order.totalQuantity(), con.localSymbol());
+                                } else {
+                                    logger.info("No Position for {}", con.description());
+                                    continue;
+                                }
                             } else {
-                                logger.info("Buy Order not implemented!");
+                                logger.info("Buy Order not implemented yet!");
+                                continue;
                             }
                             
-                            m_controller.placeOrModifyOrder(con, order, null);
+                           m_controller.placeOrModifyOrder(con, order, null);
 
                         } // if (line.contains(orderToken))                        
                     // Continue until "end of mail"

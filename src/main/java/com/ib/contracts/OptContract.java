@@ -48,7 +48,10 @@ public class OptContract extends Contract {
                 this.lastTradeDateOrContractMonth().regionMatches(0, other.lastTradeDateOrContractMonth(), 0, 6) &&
                 this.right().equals(other.right())&&
                 this.secType().equals(other.secType())) {
-            this.lastTradeDateOrContractMonth(other.lastTradeDateOrContractMonth()); // fix it up
+            
+            // fix it up
+            this.localSymbol(other.localSymbol());
+            this.lastTradeDateOrContractMonth(other.lastTradeDateOrContractMonth()); 
             return true;
         }
         

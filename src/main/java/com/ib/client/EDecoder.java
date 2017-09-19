@@ -96,7 +96,7 @@ class EDecoder implements ObjectInput {
     private int m_serverVersion;
     private IMessageReader m_messageReader;
         
-    final static Logger logger = LoggerFactory.getLogger(EReader.class);
+    final static Logger logger = LoggerFactory.getLogger(EDecoder.class);
 
     public EDecoder(int serverVersion, EWrapper callback) {
         this(serverVersion, callback, null);
@@ -139,7 +139,7 @@ class EDecoder implements ObjectInput {
     } 
     
     private boolean readMessageToInternalBuf(InputStream dis) {
-  		m_messageReader = new PreV100MessageReader(dis);
+  	m_messageReader = new PreV100MessageReader(dis);
     	return true;
     }
     
@@ -156,7 +156,7 @@ class EDecoder implements ObjectInput {
     	
     	int msgId = readInt();
         
-        logger.info("Process MsgId: {}", msgId);
+//        logger.info("Process MsgId: {}", msgId);
 
         switch( msgId) {
             case END_CONN:
