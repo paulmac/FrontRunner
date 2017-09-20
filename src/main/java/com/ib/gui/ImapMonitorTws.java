@@ -49,15 +49,16 @@ import com.sun.mail.imap.protocol.IMAPProtocol;
 import java.util.regex.Pattern;
 //import java.util.logging.Level;
 //import javax.swing.SwingWorker;
-import org.apache.commons.mail.util.*;
+//import org.apache.commons.mail.util.*;
 //import org.apache.commons.lang3.StringUtils;
 
 import com.mongodb.MongoClient;
-import com.mongodb.client.MongoCollection;
+import com.mongodb.MongoClientURI;
+//import com.mongodb.client.MongoCollection;
 //import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import static com.mongodb.client.model.Filters.*;
-import java.nio.file.Files;
+//import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.time.Month;
 import java.time.Year;
@@ -68,14 +69,14 @@ import org.bson.Document;
 //import com.mongodb.client.model.ValidationOptions;
 //import com.paulmac.trade.ImapMonitor;
 import java.util.Calendar;
-import java.util.Date;
-import java.util.Enumeration;
+//import java.util.Date;
+//import java.util.Enumeration;
 import java.util.List;
 import java.util.Properties;
-import java.util.Vector;
+//import java.util.Vector;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.stream.Stream;
+//import java.util.logging.Level;
+//import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
@@ -112,8 +113,8 @@ public class ImapMonitorTws implements IConnectionHandler {
     private final NewsPanel m_newsPanel = new NewsPanel();
     private final JTextArea m_msg = new JTextArea();
 
-    private final MongoClient mongoClient = new MongoClient();
-    private final MongoDatabase database = mongoClient.getDatabase("frontrunner");
+    private MongoClient mongoClient; // = new MongoClient();
+    private MongoDatabase database; // = mongoClient.getDatabase("frontrunner");
 
     static boolean verbose = false;
     static boolean debug = false;
@@ -215,24 +216,34 @@ public class ImapMonitorTws implements IConnectionHandler {
             m_frame.setVisible( true);
             m_frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
-            // Create 1 SwingWorker to listen for each provider alert. Only agora for now
+            // Setup MongoClient
+            MongoClientURI uri = new MongoClientURI("mongodb://"
+                    + "paulmac:acmilan"
+                    + "@clusterfr-shard-00-00-orba3.mongodb.net:27017,"
+                    + "clusterfr-shard-00-01-orba3.mongodb.net:27017,"
+                    + "clusterfr-shard-00-02-orba3.mongodb.net:27017/"
+                    + "admin?ssl=true&replicaSet=ClusterFR-shard-0&authSource=admin"
+//                    + "clusterfr-shard-00-00-orba3.mongodb.net:27017,"
+//                    + "clusterfr-shard-00-01-orba3.mongodb.net:27017,"
+//                    + "clusterfr-shard-00-02-orba3.mongodb.net:27017/"
+//                    + "frontrunner?replicaSet=ClusterFR-shard-0" --authenticationDatabase admin""
+//                    + " --ssl --username paulmac --password acmilan"
+            );
+            
+
+            mongoClient = new MongoClient(uri);
+            database = mongoClient.getDatabase("frontrunner");
+
             Document provider = database.getCollection("providers").find().first();
             logger.info("Sub Provider {}", provider.toJson());
             
-//            String m_provider = provider.getString("name");
             m_provider_address = provider.getString("address");
             m_mbox = provider.getString("mailbox");
             m_subs = (List<Document>) provider.get("subs");
             m_subs.forEach((sub) -> {
                 logger.info("sub : {} ", sub);
             });
-            
-            
-//            subs.find(eq("displayName", 3)).first()
-//      password: "acmilan32",
-//      subs: [
-
-
+                        
             Document emailConfig = database.getCollection("emailconfig").find(eq("provider", provider.getString("mailService"))).first();
             logger.info("Email Config : {}", emailConfig.toJson());
             m_user = emailConfig.getString("user");
@@ -241,8 +252,6 @@ public class ImapMonitorTws implements IConnectionHandler {
             m_protocol = imapConfig.getString("protocol");
             m_host = imapConfig.getString("host");
             m_port = ((Number)imapConfig.get("port")).intValue();
-
-    //        imapMonitor().setImapConfig(user, password, protocol, host, port);
 
             // setup IMAP listener
 
