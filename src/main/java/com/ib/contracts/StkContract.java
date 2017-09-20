@@ -28,7 +28,12 @@ public class StkContract extends Contract {
         Contract other = (Contract)obj;
         
         // Light comparison
-        return this.secType().equals(other.secType()) && this.symbol().equals(other.symbol());//                if (contract.equals(pos.contract()))
+        if (this.secType().equals(other.secType()) && this.symbol().equals(other.symbol())) {
+            this.localSymbol(other.localSymbol());
+            return true;
+        }
+        
+        return false;
     }
 
     @Override public String toString() {

@@ -1,5 +1,4 @@
-/* Copyright (C) 2013 Interactive Brokers LLC. All rights reserved.  This code is subject to the terms
- * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+/* Paulmac Software dev 2017. */
 
 package com.ib.gui;
 
@@ -124,10 +123,10 @@ public class ImapMonitorTws implements IConnectionHandler {
     static boolean saveAttachments = false;
     static int attnum = 1;
     static int freq = 1000; // 0.5 second
-    private static final String regex ="[A-Z]{3,4}"; //alpha uppercase
-    private static final String regExUpperCase = "([A-Z]{3,4})";
-    private static final Pattern upper3or4 = Pattern.compile(regExUpperCase);
-    private static final List<String> m_excludes = Arrays.asList("NYSE", "NASD", "sup3"); 
+//    private static final String regex ="[A-Z]{3,4}"; //alpha uppercase
+//    private static final String regExUpperCase = "([A-Z]{2,5}.)";
+//    private static final Pattern upper2to5 = Pattern.compile(regExUpperCase);
+    private static final List<String> m_excludes = Arrays.asList("NYSE", "OTC", "OTCBB", "TSX", "sup3"); // "NASDAQ", not included - 6 chars
 
 //    private boolean m_connected = false;
 
@@ -151,9 +150,9 @@ public class ImapMonitorTws implements IConnectionHandler {
     public ILogger getInLogger()            { return m_inLogger; }
     public ILogger getOutLogger()           { return m_outLogger; }
 
-    public static boolean isUpperCase(String str){
-        return Pattern.compile(regex).matcher(str).find();
-    }
+//    public static boolean isUpperCase(String str){
+//        return Pattern.compile(regex).matcher(str).find();
+//    }
 
     public static void main(String[] args) {
         ImapMonitorTws appMainThread = new ImapMonitorTws( new DefaultConnectionConfiguration() );
@@ -526,10 +525,10 @@ public class ImapMonitorTws implements IConnectionHandler {
                             if  (StringUtils.containsIgnoreCase(orderStr, "option")) { // containsorderStr.toLowerCase().contains("option")) {
                                 
                                 String[] words = orderStr.split("[^a-zA-Z0-9.']+"); // \\P{Alpha}+ matches any non-alphabetic character '.' is for a possible decimal point
-                            
+                                String w = words[0];
                                 for (int j=0; j < words.length; j++) {
-//                                    String w =  words[j];
-                                    if (Pattern.matches("([A-Z]{2,4})", words[j])) {
+                                    w =  words[j];
+                                    if (Pattern.matches("([A-Z]{2,5})", w) && !m_excludes.contains(w)) {
                                         
                                         con = new OptContract(words[j++]); // ticker
                                         // Obtain : lastTradeDateOrContractMonth, double strike, String right) {
@@ -557,7 +556,7 @@ public class ImapMonitorTws implements IConnectionHandler {
                             } else {
                                 String[] words = orderStr.split("\\P{Alpha}+"); // matches any non-alphabetic character
                                 for (String w:words) {                                    
-                                    if (Pattern.matches("([A-Z]{2,4})", w) && !m_excludes.contains(w)) {
+                                    if (Pattern.matches("([A-Z]{2,5})", w) && !m_excludes.contains(w)) {
                                         con = new StkContract(w);
                                         break;
                                     }
@@ -572,6 +571,8 @@ public class ImapMonitorTws implements IConnectionHandler {
                                     order.orderType(OrderType.MKT);
                                     logger.info("Sell {} of {}", order.totalQuantity(), con.localSymbol());
                                 } else {
+                                    
+                                  
                                     logger.info("No Position for {}", con.description());
                                     continue;
                                 }
@@ -594,51 +595,6 @@ public class ImapMonitorTws implements IConnectionHandler {
         }
     }
 
-
-
-//                                // Good chance it's a ticker. 
-//                                // TODO: If Sell need to verify against existing positions
-//    //                            tickerFound = true;
-//                                logger.info("Ticker Found : " + w);
-//                                if (line.toLowerCase().contains("sell")) {
-//                                    if  (line.toLowerCase().contains("option")) {
-//                                        OptContract optContract = new OptContract(w);
-//    //    Obtain : lastTradeDateOrContractMonth, double strike, String right) {
-//                                        Month month = Month.valueOf(words[++j].toUpperCase());                                    // Look for : month Year Strike Right
-//                                        Year year = Year.of(Integer.getInteger(words[++j]).intValue());
-//                                        String strike = words[++j];
-//                                        if (strike.contains("$"))
-//                                            strike = strike.substring(1); // remove $ char
-//                                        String right = words[++j];
-//                                        // Look for : month Year Strike Right
-//
-//                                    } else {
-//                                        StkContract stkContract = new StkContract(w);
-//                                        // Swing Object is the source of truth right now
-//                                        Position position = m_acctInfoPanel.findPosition(stkContract);
-//    //                                            Position position = ImapMonitorTws.INSTANCE.controller().findPosition(stkContract);
-//                                        Order order = new Order();
-//                                        order.action(Types.Action.SELL);                                            
-//                                        order.totalQuantity(position.position());
-//                                        order.orderType(OrderType.MKT);
-//                                        m_controller.placeOrModifyOrder(stkContract, order, null);
-//
-//                                    }                                            // Require Position from 'long store' PortfolioMap. Compare the Contract
-
-                                    //contracts.add(new StkContract(w));
-//                                } else if (line.toLowerCase().contains("buy")) {
-//
-//                                }
-//                                break;
-//                            }
- 
-////        return;
-
-//    public void getContent(Message message) throws MessagingException, IOException
-//{
-//    
-//}
-    
     
     @Override 
     public void connected() {
@@ -668,6 +624,11 @@ public class ImapMonitorTws implements IConnectionHandler {
             show( "disconnected");
             m_connectionPanel.m_status.setText( "disconnected");
     }
+
+    @Override public void storePosition(Position pos) {
+        logger.info("Position Updated: {} ", pos.toString());
+    }
+    // Pmac
 
     @Override public void accountList(ArrayList<String> list) {
             show( "Received account list");

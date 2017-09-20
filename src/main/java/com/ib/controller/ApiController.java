@@ -108,6 +108,7 @@ public class ApiController implements EWrapper {
             void connected();
             void disconnected();
             void accountList(ArrayList<String> list);
+            void storePosition(Position pos); // Pmac
             void error(Exception e);
             void message(int id, int errorCode, String errorMsg);
             void show(String string);
@@ -260,7 +261,9 @@ public class ApiController implements EWrapper {
 
 		Position position = new Position( contract, account, positionIn, marketPrice, marketValue, averageCost, unrealizedPNL, realizedPNL);
 		for( IAccountHandler handler : m_accountHandlers) {
-			handler.updatePortfolio( position);
+                    logger.info("Position Updated: {} ", position.toString());
+                    handler.updatePortfolio( position);
+                    m_connectionHandler.storePosition(position);
 		}
 		recEOM();
 	}
@@ -872,8 +875,8 @@ public class ApiController implements EWrapper {
 			}
 		}
 
-		m_client.placeOrder( contract, order);
-		sendEOM();
+//		m_client.placeOrder( contract, order);
+//		sendEOM();
 	}
 
 	public void cancelOrder(int orderId) {

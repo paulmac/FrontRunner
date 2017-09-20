@@ -400,6 +400,7 @@ public class AccountInfoPanel extends JPanel implements INewTab, IAccountHandler
 			if (!m_portfolioMap.containsKey( position.conid() ) && position.position() != 0) {
 				m_positions.add( position.conid() );
 			}
+                        
 			m_portfolioMap.put( position.conid(), position);
 			fireTableDataChanged();
 		}

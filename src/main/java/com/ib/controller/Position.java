@@ -44,4 +44,20 @@ public class Position {
 		m_unrealPnl = unrealPnl;
 		m_realPnl = realPnl;
 	}
+        
+    @Override 
+    public String toString() {
+
+        StringBuilder sb = new StringBuilder();
+
+        Contract.add( sb, "contract", contract().localSymbol());
+        Contract.add( sb, "account", account());
+        Contract.add( sb, "position", position());
+        Contract.add( sb, "marketPrice", marketPrice());
+        Contract.add( sb, "marketValue", marketValue());
+        Contract.add( sb, "averageCost", averageCost());
+        Contract.add( sb, "unrealPnl", unrealPnl());
+
+        return sb.toString();
+    }
 }
