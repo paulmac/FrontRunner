@@ -54,6 +54,7 @@ import java.util.regex.Pattern;
 
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
+import com.mongodb.client.MongoCollection;
 //import com.mongodb.client.MongoCollection;
 //import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -115,6 +116,8 @@ public class ImapMonitorTws implements IConnectionHandler {
 
     private MongoClient mongoClient; // = new MongoClient();
     private MongoDatabase database; // = mongoClient.getDatabase("frontrunner");
+    private MongoCollection<Document> m_recommendations;
+    private Document m_advisorfirms;
 
     static boolean verbose = false;
     static boolean debug = false;
@@ -127,7 +130,7 @@ public class ImapMonitorTws implements IConnectionHandler {
 //    private static final String regex ="[A-Z]{3,4}"; //alpha uppercase
 //    private static final String regExUpperCase = "([A-Z]{2,5}.)";
 //    private static final Pattern upper2to5 = Pattern.compile(regExUpperCase);
-    private static final List<String> m_excludes = Arrays.asList("NYSE", "OTC", "OTCBB", "TSX", "sup3"); // "NASDAQ", not included - 6 chars
+    private static final List<String> m_exchanges = Arrays.asList("NYSE", "NASDAQ", "OTC", "OTCBB", "TSX", "sup3"); // "NASDAQ", not included - 6 chars
 
 //    private boolean m_connected = false;
 
@@ -138,7 +141,7 @@ public class ImapMonitorTws implements IConnectionHandler {
     static private String m_password;
     static private String m_protocol;
     static private String m_host;
-    static private String m_provider_address; // = "paulmac1914@yahoo.com";
+    static private String m_advisorfirm_email; // = "paulmac1914@yahoo.com";
     static private int m_port;
     private boolean m_activated;
     static private List<Document> m_subs;
@@ -217,8 +220,7 @@ public class ImapMonitorTws implements IConnectionHandler {
             m_frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
             // Setup MongoClient
-            MongoClientURI uri = new MongoClientURI("mongodb://"
-                    + "paulmac:acmilan"
+            MongoClientURI uri = new MongoClientURI("mongodb://paulmac:acmilan"
                     + "@clusterfr-shard-00-00-orba3.mongodb.net:27017,"
                     + "clusterfr-shard-00-01-orba3.mongodb.net:27017,"
                     + "clusterfr-shard-00-02-orba3.mongodb.net:27017/"
@@ -234,17 +236,17 @@ public class ImapMonitorTws implements IConnectionHandler {
             mongoClient = new MongoClient(uri);
             database = mongoClient.getDatabase("frontrunner");
 
-            Document provider = database.getCollection("providers").find().first();
-            logger.info("Sub Provider {}", provider.toJson());
+            m_advisorfirms = database.getCollection("advisorfirms").find().first();
+            logger.info("Sub Provider {}", m_advisorfirms.toJson());
             
-            m_provider_address = provider.getString("address");
-            m_mbox = provider.getString("mailbox");
-            m_subs = (List<Document>) provider.get("subs");
+            m_advisorfirm_email = m_advisorfirms.getString("email");
+            m_mbox = m_advisorfirms.getString("mailbox");
+            m_subs = (List<Document>) m_advisorfirms.get("subscriptions");
             m_subs.forEach((sub) -> {
                 logger.info("sub : {} ", sub);
             });
                         
-            Document emailConfig = database.getCollection("emailconfig").find(eq("provider", provider.getString("mailService"))).first();
+            Document emailConfig = database.getCollection("emailconfig").find(eq("_id", m_advisorfirms.getString("emailconfig_id"))).first();
             logger.info("Email Config : {}", emailConfig.toJson());
             m_user = emailConfig.getString("user");
             m_password = emailConfig.getString("password");
@@ -252,6 +254,8 @@ public class ImapMonitorTws implements IConnectionHandler {
             m_protocol = imapConfig.getString("protocol");
             m_host = imapConfig.getString("host");
             m_port = ((Number)imapConfig.get("port")).intValue();
+            
+            m_recommendations = database.getCollection("recommendations");
 
             // setup IMAP listener
 
@@ -307,27 +311,13 @@ public class ImapMonitorTws implements IConnectionHandler {
                 }
             }).start();
 
-//            synchronized(this) { 
-//                for (;;) {
-//                    // gmail closes a connection after 10 mins idle, (most others 30 mins or so)
-//                    TimeUnit.MINUTES.sleep(3);
-//                    // If you want to abuse the IMAP connection by keeping an unused connection open, 
-//                    // Simple method is call Folder.getMessageCount every 9 minutes. 
-//                    // If that still fails, reconnect.
-//                    ensureOpen(); // Just to make sure!
-//                    int cnt = m_folder.getMessageCount();
-//                    logger.info(Calendar.getInstance().getTime() + "; messageCount()=" + cnt);
-//                }
-//            }
             // causes the current thread to pause execution until idleThread's thread terminate
             //idleThread.join();
         } catch (Exception e) {
             logger.error("msg {}.", e, e);
         } finally {
             logger.info("Finished ImapMonitorTws Startup");
-            show("Finished ApiDemo thread: " + Thread.currentThread().getName());        
-//            closeFolder();
-            // idleThread.kill(); //to terminate from another thread
+            show("Finished ApiDemo thread");        
         }        
     }
 
@@ -450,13 +440,13 @@ public class ImapMonitorTws implements IConnectionHandler {
                                 String address = email.getAddress();
                                 String personal = StringUtils.replacePattern(email.getPersonal(), "[^a-zA-Z0-9.\\ ]+", ""); // to remove ambiguous ' or ’ 
                                 logger.info("Email arrived from : [{}] <{}> with Subject: {}", personal, address, subject);
-                                if (address.equals(m_provider_address)) {
+                                if (address.equals(m_advisorfirm_email)) {
                                     for (Document sub: m_subs) {
                                          // indicative of a Buy or Sell Recommendation(s) embedded in the body
-                                        String displayName = StringUtils.replacePattern(sub.getString("displayName"), "[^a-zA-Z0-9.\\ ]+", "");
+                                        String displayName = StringUtils.replacePattern(sub.getString("fullname"), "[^a-zA-Z0-9.\\ ]+", "");
                                         if ((StringUtils.equals(personal, displayName))&& 
-                                                subject.contains(sub.getString("sellSubjectToken")) || 
-                                                subject.contains(sub.getString("buySubjectToken"))) {
+                                                (subject.contains(sub.getString("sellSubjectToken")) || 
+                                                subject.contains(sub.getString("buySubjectToken")))) {
                                             // find and process the individual Recommendation(s) in the msg
                                             process((MimeMessage)msg, sub);
                                             return;
@@ -514,7 +504,7 @@ public class ImapMonitorTws implements IConnectionHandler {
                             order.action(Types.Action.SSHORT); // Pmac: Should modify also in Ctor?
 
                             // SB initialised with rest of line ( omitting Order Token itself)
-                            StringBuffer sb = new StringBuffer(line.substring(orderToken.length())); 
+                            StringBuilder sb = new StringBuilder(line.substring(orderToken.length())); 
                             // Read until Order line is found, can be same line, next line or line after a space
                              while (order.action().equals(Types.Action.SSHORT)) {
                                 if (StringUtils.containsIgnoreCase(line, "buy"))
@@ -524,8 +514,10 @@ public class ImapMonitorTws implements IConnectionHandler {
                                 
                                 // Do this anyway as the 'option' keyword might be on the next line
                                 line = reader.readLine();
-                                if (StringUtils.isNotBlank(line))
-                                    sb.append(line);                                
+                                if (StringUtils.isNotBlank(line)) {
+                                    sb.append(line);
+                                    sb.append(" "); // so last word and first word of next string don't merge
+                                }
                             }
 
                             orderStr = sb.toString();
@@ -537,7 +529,7 @@ public class ImapMonitorTws implements IConnectionHandler {
                                 String w = words[0];
                                 for (int j=0; j < words.length; j++) {
                                     w =  words[j];
-                                    if (Pattern.matches("([A-Z]{2,5})", w) && !m_excludes.contains(w)) {
+                                    if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges.contains(w)) {
                                         
                                         con = new OptContract(words[j++]); // ticker
                                         // Obtain : lastTradeDateOrContractMonth, double strike, String right) {
@@ -549,23 +541,34 @@ public class ImapMonitorTws implements IConnectionHandler {
                                         c.set(year.getValue(), month.ordinal(), 15, 0, 0);  
                                         SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
                                         con.lastTradeDateOrContractMonth(sdf.format(c.getTime()));
-
                                         con.strike(new Double(words[j++]));
-//                                        w = words[j];
                                         con.right(words[j++].toUpperCase());
-                                        logger.info("Option Contract: {}", con);
-//                                        String s = words[j++];
-//                                        if (s.contains("$"))
-//                                            s = s.substring(1); // remove $ char
-//                                        String r = words[++j];
-                                        // Look for : month Year Strike Right
+                                        
+                                        if (order.action().equals(Types.Action.BUY)) {
+                                            while (!(words[j].equals("up") && words[j+1].equals("to")))
+                                                j++;
+                                            
+                                            order.auxPrice(new Double(words[j+2]));
+                                            
+                                            // Look for limitPrice; somewhere after "assuming ..."
+                                            do {                                                
+                                                line = reader.readLine();
+                                            } while (!StringUtils.containsIgnoreCase(line, "assuming"));
+                                            
+                                            sb = new StringBuilder(StringUtils.substringAfter(line, "assuming"));
+                                            sb.append(" "); // so last word and first word of next string don't merge
+                                            sb.append(reader.readLine()); // "assuming a $limitPrice .." may span more than 1 line
+                                            words = StringUtils.substringAfter(sb.toString(), "$").split("[^0-9.']+");                                            
+                                            order.lmtPrice(new Double(words[0]));
+                                        }
 
+                                        logger.info("Option Contract: {} Order: {}", con.localSymbol(), order.toString());
                                     }
                                 }
                             } else {
                                 String[] words = orderStr.split("\\P{Alpha}+"); // matches any non-alphabetic character
                                 for (String w:words) {                                    
-                                    if (Pattern.matches("([A-Z]{2,5})", w) && !m_excludes.contains(w)) {
+                                    if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges.contains(w)) {
                                         con = new StkContract(w);
                                         break;
                                     }
@@ -579,14 +582,47 @@ public class ImapMonitorTws implements IConnectionHandler {
                                     order.totalQuantity(position.position());
                                     order.orderType(OrderType.MKT);
                                     logger.info("Sell {} of {}", order.totalQuantity(), con.localSymbol());
-                                } else {
-                                    
-                                  
+                                } else {                                  
                                     logger.info("No Position for {}", con.description());
                                     continue;
                                 }
                             } else {
-                                logger.info("Buy Order not implemented yet!");
+                                logger.info("Buy Order Stored in MongoDB");
+//                                List<Document> recs = (List<Document>) sub.get("recommendations"); 
+                                
+                                Document rec = new Document();
+                                rec.put("_id", con.localSymbol());
+                                rec.put("symbol", con.symbol());
+                                rec.put("secType", con.secType().toString());
+                                rec.put("lastTradeDateOrContractMonth", con.lastTradeDateOrContractMonth());
+                                rec.put("strike", con.strike());
+                                rec.put("right", con.right().toString());
+//                                rec.put("entryPrice", ); // Agora published 'entry' price
+                                rec.put("limitPrice", order.lmtPrice());
+                                rec.put("buyUpToPrice", order.auxPrice());
+                                rec.put("subscription_id", sub.get("_id"));
+                                
+                                Document pos = new Document();
+                                pos.put("_id", con.localSymbol());
+                                pos.put("recommedation_id", con.localSymbol()); // same for first (default) position
+                                pos.put("exchange", "SMART");   // default
+                                pos.put("currency", "USD");     // default
+                                pos.put("position", 0);         // initially, basically a placeholder
+                                pos.put("averagePrice", 0.0);   // initially, basically a placeholder
+                                pos.put("currentPrice", 0.0);   // initially, basically a placeholder
+                                pos.put("percentGain", 0.0);    // initially, basically a placeholder
+                                
+                                rec.append("positions", pos);
+//                                List<Document> positions = new ArrayList<Document>();
+//                                MongoCollection<Document> positions = (MongoCollection<Document>)pos.get("positions");
+//                                MongoCollection<Document> pos = new MongoCollection<Document>();
+//                                positions.add(pos);
+//                                rec.put("positions", positions);                                
+                                m_recommendations.insertOne(rec);
+//                                sub.replace("recommendations", recs);
+//                                m_advisorfirms.replace(line, line)
+                                
+//                                sub.notify();
                                 continue;
                             }
                             
@@ -599,6 +635,8 @@ public class ImapMonitorTws implements IConnectionHandler {
             }
         } catch (IOException | NumberFormatException | MessagingException e) {
             logger.error("msg {}.", e, e);
+        } catch (Exception e) {
+            logger.error("msg {}.", e, e);            
         } finally { 
             logger.info("Finisned processing msg from : {}", sub.get("displayName"));
         }
@@ -634,10 +672,12 @@ public class ImapMonitorTws implements IConnectionHandler {
             m_connectionPanel.m_status.setText( "disconnected");
     }
 
-    @Override public void storePosition(Position pos) {
+    @Override // Pmac
+    public void storePosition(Position pos) {
+//        logger.info("Position Updated: {} pos={}", pos.contract().localSymbol(), pos.position());
         logger.info("Position Updated: {} ", pos.toString());
     }
-    // Pmac
+    
 
     @Override public void accountList(ArrayList<String> list) {
             show( "Received account list");

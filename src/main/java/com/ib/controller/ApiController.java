@@ -261,7 +261,6 @@ public class ApiController implements EWrapper {
 
 		Position position = new Position( contract, account, positionIn, marketPrice, marketValue, averageCost, unrealizedPNL, realizedPNL);
 		for( IAccountHandler handler : m_accountHandlers) {
-                    logger.info("Position Updated: {} ", position.toString());
                     handler.updatePortfolio( position);
                     m_connectionHandler.storePosition(position);
 		}
