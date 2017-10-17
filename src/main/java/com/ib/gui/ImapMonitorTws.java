@@ -445,8 +445,8 @@ public class ImapMonitorTws implements IConnectionHandler {
                                          // indicative of a Buy or Sell Recommendation(s) embedded in the body
                                         String displayName = StringUtils.replacePattern(sub.getString("fullname"), "[^a-zA-Z0-9.\\ ]+", "");
                                         if ((StringUtils.equals(personal, displayName))&& 
-                                                (subject.contains(sub.getString("sellSubjectToken")) || 
-                                                subject.contains(sub.getString("buySubjectToken")))) {
+                                                (StringUtils.containsIgnoreCase(subject,sub.getString("sellSubjectToken")) || 
+                                                StringUtils.containsIgnoreCase(subject,sub.getString("buySubjectToken")))) {
                                             // find and process the individual Recommendation(s) in the msg
                                             process((MimeMessage)msg, sub);
                                             return;
@@ -469,6 +469,8 @@ public class ImapMonitorTws implements IConnectionHandler {
 
     public /* synchronized */ void process(Message msg, Document sub) {        
         try {            
+            int lnctr = 0;
+
             Multipart multiPart = (Multipart) msg.getContent();
             
             for (int i = 0; i < multiPart.getCount(); i++) {
@@ -485,7 +487,6 @@ public class ImapMonitorTws implements IConnectionHandler {
                     Contract con = null; // Contract created for each Recomendation or "Order Line"
                     Order order = null;
                     String line = null;
-                    int lnctr = 0;
                     String orderStr = null;
                     String orderToken = sub.getString("orderToken");
                     String eomToken = sub.getString("eomToken");
@@ -550,16 +551,22 @@ public class ImapMonitorTws implements IConnectionHandler {
                                             
                                             order.auxPrice(new Double(words[j+2]));
                                             
-                                            // Look for limitPrice; somewhere after "assuming ..."
-                                            do {                                                
-                                                line = reader.readLine();
-                                            } while (!StringUtils.containsIgnoreCase(line, "assuming"));
-                                            
-                                            sb = new StringBuilder(StringUtils.substringAfter(line, "assuming"));
-                                            sb.append(" "); // so last word and first word of next string don't merge
-                                            sb.append(reader.readLine()); // "assuming a $limitPrice .." may span more than 1 line
-                                            words = StringUtils.substringAfter(sb.toString(), "$").split("[^0-9.']+");                                            
-                                            order.lmtPrice(new Double(words[0]));
+                                            // Rickard's subs offer an assumed entry price, somewhere after "assuming ..."
+                                            // We use this as our 'limitPrice'
+                                            if (sub.getString("fullname").contains("Rickards")) {                                            
+                                                do {                                                
+                                                    line = reader.readLine();
+                                                    logger.info("Line {} : {}", lnctr++, line);
+                                                } while (!StringUtils.containsIgnoreCase(line, "assuming"));
+
+                                                sb = new StringBuilder(StringUtils.substringAfter(line, "ssuming")); // avoid capital/lowercase issue for 'A' 
+                                                sb.append(" "); // so last word and first word of next string don't merge
+                                                sb.append(reader.readLine()); // "assuming a $limitPrice .." may span more than 1 line
+                                                words = StringUtils.substringAfter(sb.toString(), "$").split("[^0-9.']+");                                            
+                                                order.lmtPrice(new Double(words[0]));
+                                            } else {
+                                                order.lmtPrice(order.auxPrice()); // same thing for non Rickard's subs
+                                            }
                                         }
 
                                         logger.info("Option Contract: {} Order: {}", con.localSymbol(), order.toString());
@@ -588,7 +595,6 @@ public class ImapMonitorTws implements IConnectionHandler {
                                 }
                             } else {
                                 logger.info("Buy Order Stored in MongoDB");
-//                                List<Document> recs = (List<Document>) sub.get("recommendations"); 
                                 
                                 Document rec = new Document();
                                 rec.put("_id", con.localSymbol());
@@ -597,9 +603,11 @@ public class ImapMonitorTws implements IConnectionHandler {
                                 rec.put("lastTradeDateOrContractMonth", con.lastTradeDateOrContractMonth());
                                 rec.put("strike", con.strike());
                                 rec.put("right", con.right().toString());
-//                                rec.put("entryPrice", ); // Agora published 'entry' price
+                                rec.put("entryPrice", 0.0); // Agora published 'entry' price
                                 rec.put("limitPrice", order.lmtPrice());
                                 rec.put("buyUpToPrice", order.auxPrice());
+//                                rec.put("autoBuy", sub.getBoolean("autoBuy"));
+//                                rec.put("autoBuyLimit", sub.getDouble("autoBuyLimit"));
                                 rec.put("subscription_id", sub.get("_id"));
                                 
                                 Document pos = new Document();
@@ -621,16 +629,25 @@ public class ImapMonitorTws implements IConnectionHandler {
                                 m_recommendations.insertOne(rec);
 //                                sub.replace("recommendations", recs);
 //                                m_advisorfirms.replace(line, line)
-                                
-//                                sub.notify();
-                                continue;
+
+                                if (sub.getBoolean("autoBuy")) {
+                                    // Use upToLimit position requested.
+                                    int requiredPos = new Double(sub.getDouble("autoBuyLimit")/order.auxPrice()).intValue();
+                                    order.minQty(requiredPos);
+                                    order.lmtPrice(i);
+                                    order.orderType(OrderType.LMT);
+                                } else {
+                                    continue;
+                                }
                             }
                             
                            m_controller.placeOrModifyOrder(con, order, null);
 
                         } // if (line.contains(orderToken))                        
                     // Continue until "end of mail"
-                    } while (!line.contains(eomToken));                
+                    } while (!StringUtils.containsIgnoreCase(line, eomToken) && (line != null));
+                    
+                    break; // out of for loop around Body Parts
                 }
             }
         } catch (IOException | NumberFormatException | MessagingException e) {
@@ -638,7 +655,7 @@ public class ImapMonitorTws implements IConnectionHandler {
         } catch (Exception e) {
             logger.error("msg {}.", e, e);            
         } finally { 
-            logger.info("Finisned processing msg from : {}", sub.get("displayName"));
+            logger.info("Finisned processing msg from : {}", sub.get("fullname"));
         }
     }
 
