@@ -76,6 +76,7 @@ import java.util.List;
 import java.util.Properties;
 //import java.util.Vector;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 //import java.util.logging.Level;
 //import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
@@ -397,6 +398,187 @@ public class ImapMonitorTws implements IConnectionHandler {
         }
     }
 
+    private Double getBuyLimit(String[] words, int j) {
+        while (!(words[j].equals("up") && words[j+1].equals("to")))
+            j++;       
+        String retVal = words[j+2].replaceAll("^\\p{Punct}+|\\p{Punct}+$","");
+        return new Double(retVal);                                            
+    }
+
+    private void processMsgContent(String content, Document sub) {
+
+        Contract con = null; // Contract created for each Recomendation or "Order Line"
+        Order order = null;
+        String line = null;
+        String orderStr = null;
+        String orderToken = sub.getString("orderToken");
+
+//        int blockCnt = StringUtils.countMatches(content, orderToken);
+
+        String[] blocks = StringUtils.splitByWholeSeparator(content, orderToken);
+
+        // Process content in terms of Blocks of Recommendations
+        for (int k = 1; k < blocks.length; k++) {
+            try {
+                String block = blocks[k].trim(); // remove leading whitespace
+                con = null; // Contract created for each Recomendation or "Order Line"
+
+                order = new Order();
+                order.action(Types.Action.SSHORT); // Pmac: Should modify also in Ctor?
+
+                logger.info("Block {} ", block);
+                String[] lines = block.split("\\r?\\n");
+                int lnctr = 0;
+                StringBuilder sb = new StringBuilder(); // Has action "Sell" or "Buy" but may span another line or 2                                                
+
+                // Identify Order String and setup Order object
+                for (String l : lines) {
+                    logger.info("Block Line {} : {}", lnctr++, l);
+                    if (l.isEmpty()) {           
+
+    //                    order = getOrder(sb.toString());
+                        orderStr = sb.toString();
+                        logger.info("{} Order: {} ", order.action(), orderStr);
+
+                        // get Order fields
+                        if  (StringUtils.containsIgnoreCase(orderStr, "option")) { // containsorderStr.toLowerCase().contains("option")) {
+
+                            String[] words = orderStr.split("[^a-zA-Z0-9.']+"); // \\P{Alpha}+ matches any non-alphabetic character '.' is for a possible decimal point
+                            String w = words[0];
+                            for (int j=0; j < words.length; j++) {
+                                w =  words[j];
+                                if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges.contains(w)) {
+
+                                    con = new OptContract(words[j++]); // ticker
+                                    // Obtain : lastTradeDateOrContractMonth, double strike, String right) {
+                                    String m = words[j++];
+                                    Month month = Month.valueOf(m.toUpperCase());
+                                    String y = words[j++];
+                                    Year year = Year.of(new Integer(y));
+                                    Calendar c = Calendar.getInstance();
+                                    c.set(year.getValue(), month.ordinal(), 15, 0, 0);  
+                                    SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
+                                    con.lastTradeDateOrContractMonth(sdf.format(c.getTime()));
+                                    con.strike(new Double(words[j++]));
+                                    con.right(words[j++].toUpperCase());
+                                    if (order.action().equals(Types.Action.BUY))
+                                        order.auxPrice(getBuyLimit(words, j));
+                                }
+                            }
+                        } else {
+                            String[] words = orderStr.split("[^a-zA-Z\\d*\\.\\d+]+"); // \\P{Alpha}+  matches any non-alphabetic character
+    //                                    for (String w:words) {                                    
+                            for (int j=0; j < words.length; j++) {
+                                String w =  words[j];
+                                w = w.replaceAll("^\\p{Punct}+|\\p{Punct}+$","");
+                                if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges.contains(w)) {
+                                    con = new StkContract(w);
+                                    if (order.action().equals(Types.Action.BUY))
+                                        order.auxPrice(getBuyLimit(words, j));
+                                    break;
+                                }
+                            }
+                        }                                            
+
+                        if (order.action().equals(Types.Action.SELL)) {
+                            // Require Position from 'long store' PortfolioMap. Compare the Contract 
+                            Position position = m_acctInfoPanel.findPosition(con);
+                            if (position != null) {
+                                order.totalQuantity(position.position());
+                                order.orderType(OrderType.MKT);
+                                logger.info("Sell {} of {}", order.totalQuantity(), con.localSymbol());
+                            } else {                                  
+                                logger.info("No Position for {}", con.description());
+                                break; // ... out of Block but continue with rest of the Blocks;
+                            }
+                        } else {                            
+                            // Rickards' subs talk about an 'assumed' entry price, 
+                            // this is our preferred BUY 'limit price' 
+                            if (sub.getString("fullname").contains("Rickards")) {                                            
+                                do {                                                
+                                    l = lines[lnctr];
+                                    logger.info("Line {} : {}", lnctr++, l);
+                                } while (!StringUtils.containsIgnoreCase(l, "assuming"));
+
+                                sb = new StringBuilder(StringUtils.substringAfter(l, "ssuming")); // avoid capital/lowercase issue for 'A' 
+                                sb.append(" "); // so last word and first word of next string don't merge
+                                sb.append(lines[k]); // "assuming a $limitPrice .." may span more than 1 line
+                                String[] words = StringUtils.substringAfter(sb.toString(), "$").split("[^0-9.']+");                                            
+                                order.lmtPrice(new Double(words[0]));
+                            } else {
+                                order.lmtPrice(order.auxPrice()); // same thing for non Rickard's subs
+                            }
+
+                            try {
+                                Document rec = new Document();
+                                rec.put("_id", con.localSymbol());
+                                rec.put("symbol", con.symbol());
+                                rec.put("secType", con.secType().toString());
+                                rec.put("lastTradeDateOrContractMonth", con.lastTradeDateOrContractMonth());
+                                rec.put("strike", con.strike());
+                                rec.put("right", con.right().toString());
+                                rec.put("entryPrice", 0.0); // Agora published 'entry' price
+                                rec.put("limitPrice", order.lmtPrice());
+                                rec.put("buyUpToPrice", order.auxPrice());
+                                //                                rec.put("autoBuy", sub.getBoolean("autoBuy"));
+                                //                                rec.put("autoBuyLimit", sub.getDouble("autoBuyLimit"));
+                                rec.put("subscription_id", sub.get("_id"));
+                                
+                                Document pos = new Document();
+                                pos.put("_id", con.localSymbol());
+                                pos.put("recommedation_id", con.localSymbol()); // same for first (default) position
+                                pos.put("exchange", "SMART");   // default
+                                pos.put("currency", "USD");     // default
+                                pos.put("position", 0);         // initially, basically a placeholder
+                                pos.put("averagePrice", 0.0);   // initially, basically a placeholder
+                                pos.put("currentPrice", 0.0);   // initially, basically a placeholder
+                                pos.put("percentGain", 0.0);    // initially, basically a placeholder
+
+                                rec.append("positions", pos);
+                                m_recommendations.insertOne(rec);
+                            } catch (com.mongodb.MongoException e) {
+                                logger.error("msg {}.", e, e);
+                            }
+                            
+                            logger.info("Buy Order Stored in MongoDB");
+
+                            if (sub.getBoolean("autoBuy")) {
+                                // Use upToLimit position requested.
+                                int requiredPos = new Double(sub.getDouble("autoBuyLimit")/order.auxPrice()).intValue();
+                                order.minQty(requiredPos);
+    //                            order.lmtPrice(i);
+                                order.orderType(OrderType.LMT);
+                            } else {
+                                 break; // ... out of Block but continue with rest of the Blocks;
+                            }
+                        }
+
+                        m_controller.placeOrModifyOrder(con, order, null);
+                       
+                        logger.info("order {} sent to TWS.", con.localSymbol());
+                        
+                        break; // out of loop for this 'Block'
+
+                    } else { // continue building "Order String"
+                        sb.append(l);
+                        sb.append(" ");
+                        if (order.action().equals(Types.Action.SSHORT))
+                        if (StringUtils.containsIgnoreCase(l, "buy"))
+                            order.action(Types.Action.BUY);
+                        else if (StringUtils.containsIgnoreCase(l, "sell"))
+                            order.action(Types.Action.SELL);
+                    }
+                } // for (String l : lines) Process each line of a "Block" (i.e a reccommendation)
+            } catch (NumberFormatException nfe) {
+                logger.error("msg {}.", nfe, nfe);
+            } catch (Exception e) {
+                logger.error("msg {}.", e, e);
+            } finally {
+                logger.info("Finished ImapMonitorTws Startup");
+            }                
+        } // for (int k = 1; k < blockCnt; k++) Process loop of each "Block" (i.e a reccommendation)        
+    }        
+
 //    Stuff to do with actually processing of incoming mail
     public void openFolder() {
         try {              
@@ -426,7 +608,7 @@ public class ImapMonitorTws implements IConnectionHandler {
             // Add messageCountListener to listen for new messages
             m_folder.addMessageCountListener(new MessageCountAdapter() {
                 @Override
-                /* Attempting to block the Folder Closed exceptyion with Synchronized*/ 
+                /* Attempting to block the Folder Closed exception with Synchronized*/ 
                 public synchronized void messagesAdded(MessageCountEvent ev) { // pmac : not sure if I can use synchronized here?
                     
                     // ensureOpen();  // pmac : not sure if necessary?
@@ -448,13 +630,30 @@ public class ImapMonitorTws implements IConnectionHandler {
                                                 (StringUtils.containsIgnoreCase(subject,sub.getString("sellSubjectToken")) || 
                                                 StringUtils.containsIgnoreCase(subject,sub.getString("buySubjectToken")))) {
                                             // find and process the individual Recommendation(s) in the msg
-                                            process((MimeMessage)msg, sub);
+//                                            process((MimeMessage)msg, sub);
+                                            Multipart multiPart = (Multipart) msg.getContent();
+
+                                            for (int i = 0; i < multiPart.getCount(); i++) {
+                                                MimeBodyPart part = (MimeBodyPart) multiPart.getBodyPart(i);
+                                                if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) {
+                                                    // this part is attachment
+                                                    // code to save attachment...
+                                                    logger.info("Part : {}", part.getDisposition());
+                                                } else {
+                                                    String content = (String)part.getContent();
+                                                    new Thread(() -> {
+                                                        Thread.currentThread().setName("MsgProcessThread");
+                                                        processMsgContent(content, sub);
+                                                    }).start();
+                                                }
+                                            }                                            
                                             return;
                                         }
                                     }
                                 }
-                            } catch (MessagingException me) {
+                            } catch (IOException | MessagingException me) {
                                 logger.error("msg {}.", me,toString(), me);
+                                 ensureOpen(); // recursive
                             }
                         } while (!m_folder.isOpen());
                     }
@@ -466,200 +665,7 @@ public class ImapMonitorTws implements IConnectionHandler {
             ensureOpen(); // recursive
         }        
     }
-
-    public /* synchronized */ void process(Message msg, Document sub) {        
-        try {            
-            int lnctr = 0;
-
-            Multipart multiPart = (Multipart) msg.getContent();
-            
-            for (int i = 0; i < multiPart.getCount(); i++) {
-                MimeBodyPart part = (MimeBodyPart) multiPart.getBodyPart(i);
-                if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) {
-                    // this part is attachment
-                    // code to save attachment...
-                    logger.info("Part : {}", part.getDisposition());
-                } else {
-//                    boolean inSection = false;
-//                    boolean tickerFound = false;
-                    // this part may be the message content
-//                    String plainContent = part.getContent().toString();
-                    Contract con = null; // Contract created for each Recomendation or "Order Line"
-                    Order order = null;
-                    String line = null;
-                    String orderStr = null;
-                    String orderToken = sub.getString("orderToken");
-                    String eomToken = sub.getString("eomToken");
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(part.getInputStream()));
-
-                    do {
-                        line = reader.readLine();
-                        logger.info("Line {} : {}", lnctr++, line);
-
-                        // Keep reading until line contains an Order Token
-                        if  (StringUtils.containsIgnoreCase(line, orderToken)) { // containsorderStr.toLowerCase().contains("option")) {
-
-                            con = null; // Contract created for each Recomendation or "Order Line"
-                            
-                            order = new Order();
-                            order.action(Types.Action.SSHORT); // Pmac: Should modify also in Ctor?
-
-                            // SB initialised with rest of line ( omitting Order Token itself)
-                            StringBuilder sb = new StringBuilder(line.substring(orderToken.length())); 
-                            // Read until Order line is found, can be same line, next line or line after a space
-                             while (order.action().equals(Types.Action.SSHORT)) {
-                                if (StringUtils.containsIgnoreCase(line, "buy"))
-                                    order.action(Types.Action.BUY);
-                                else if (StringUtils.containsIgnoreCase(line, "sell"))
-                                    order.action(Types.Action.SELL);
-                                
-                                // Do this anyway as the 'option' keyword might be on the next line
-                                line = reader.readLine();
-                                if (StringUtils.isNotBlank(line)) {
-                                    sb.append(line);
-                                    sb.append(" "); // so last word and first word of next string don't merge
-                                }
-                            }
-
-                            orderStr = sb.toString();
-                            logger.info("{} Order: {} ", order.action(), orderStr);
-
-                            if  (StringUtils.containsIgnoreCase(orderStr, "option")) { // containsorderStr.toLowerCase().contains("option")) {
-                                
-                                String[] words = orderStr.split("[^a-zA-Z0-9.']+"); // \\P{Alpha}+ matches any non-alphabetic character '.' is for a possible decimal point
-                                String w = words[0];
-                                for (int j=0; j < words.length; j++) {
-                                    w =  words[j];
-                                    if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges.contains(w)) {
-                                        
-                                        con = new OptContract(words[j++]); // ticker
-                                        // Obtain : lastTradeDateOrContractMonth, double strike, String right) {
-                                        String m = words[j++];
-                                        Month month = Month.valueOf(m.toUpperCase());
-                                        String y = words[j++];
-                                        Year year = Year.of(new Integer(y));
-                                        Calendar c = Calendar.getInstance();
-                                        c.set(year.getValue(), month.ordinal(), 15, 0, 0);  
-                                        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
-                                        con.lastTradeDateOrContractMonth(sdf.format(c.getTime()));
-                                        con.strike(new Double(words[j++]));
-                                        con.right(words[j++].toUpperCase());
-                                        
-                                        if (order.action().equals(Types.Action.BUY)) {
-                                            while (!(words[j].equals("up") && words[j+1].equals("to")))
-                                                j++;
-                                            
-                                            order.auxPrice(new Double(words[j+2]));
-                                            
-                                            // Rickard's subs offer an assumed entry price, somewhere after "assuming ..."
-                                            // We use this as our 'limitPrice'
-                                            if (sub.getString("fullname").contains("Rickards")) {                                            
-                                                do {                                                
-                                                    line = reader.readLine();
-                                                    logger.info("Line {} : {}", lnctr++, line);
-                                                } while (!StringUtils.containsIgnoreCase(line, "assuming"));
-
-                                                sb = new StringBuilder(StringUtils.substringAfter(line, "ssuming")); // avoid capital/lowercase issue for 'A' 
-                                                sb.append(" "); // so last word and first word of next string don't merge
-                                                sb.append(reader.readLine()); // "assuming a $limitPrice .." may span more than 1 line
-                                                words = StringUtils.substringAfter(sb.toString(), "$").split("[^0-9.']+");                                            
-                                                order.lmtPrice(new Double(words[0]));
-                                            } else {
-                                                order.lmtPrice(order.auxPrice()); // same thing for non Rickard's subs
-                                            }
-                                        }
-
-                                        logger.info("Option Contract: {} Order: {}", con.localSymbol(), order.toString());
-                                    }
-                                }
-                            } else {
-                                String[] words = orderStr.split("\\P{Alpha}+"); // matches any non-alphabetic character
-                                for (String w:words) {                                    
-                                    if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges.contains(w)) {
-                                        con = new StkContract(w);
-                                        break;
-                                    }
-                                }
-                            }                                            
-
-                            if (order.action().equals(Types.Action.SELL)) {
-                                // Require Position from 'long store' PortfolioMap. Compare the Contract 
-                                Position position = m_acctInfoPanel.findPosition(con);
-                                if (position != null) {
-                                    order.totalQuantity(position.position());
-                                    order.orderType(OrderType.MKT);
-                                    logger.info("Sell {} of {}", order.totalQuantity(), con.localSymbol());
-                                } else {                                  
-                                    logger.info("No Position for {}", con.description());
-                                    continue;
-                                }
-                            } else {
-                                logger.info("Buy Order Stored in MongoDB");
-                                
-                                Document rec = new Document();
-                                rec.put("_id", con.localSymbol());
-                                rec.put("symbol", con.symbol());
-                                rec.put("secType", con.secType().toString());
-                                rec.put("lastTradeDateOrContractMonth", con.lastTradeDateOrContractMonth());
-                                rec.put("strike", con.strike());
-                                rec.put("right", con.right().toString());
-                                rec.put("entryPrice", 0.0); // Agora published 'entry' price
-                                rec.put("limitPrice", order.lmtPrice());
-                                rec.put("buyUpToPrice", order.auxPrice());
-//                                rec.put("autoBuy", sub.getBoolean("autoBuy"));
-//                                rec.put("autoBuyLimit", sub.getDouble("autoBuyLimit"));
-                                rec.put("subscription_id", sub.get("_id"));
-                                
-                                Document pos = new Document();
-                                pos.put("_id", con.localSymbol());
-                                pos.put("recommedation_id", con.localSymbol()); // same for first (default) position
-                                pos.put("exchange", "SMART");   // default
-                                pos.put("currency", "USD");     // default
-                                pos.put("position", 0);         // initially, basically a placeholder
-                                pos.put("averagePrice", 0.0);   // initially, basically a placeholder
-                                pos.put("currentPrice", 0.0);   // initially, basically a placeholder
-                                pos.put("percentGain", 0.0);    // initially, basically a placeholder
-                                
-                                rec.append("positions", pos);
-//                                List<Document> positions = new ArrayList<Document>();
-//                                MongoCollection<Document> positions = (MongoCollection<Document>)pos.get("positions");
-//                                MongoCollection<Document> pos = new MongoCollection<Document>();
-//                                positions.add(pos);
-//                                rec.put("positions", positions);                                
-                                m_recommendations.insertOne(rec);
-//                                sub.replace("recommendations", recs);
-//                                m_advisorfirms.replace(line, line)
-
-                                if (sub.getBoolean("autoBuy")) {
-                                    // Use upToLimit position requested.
-                                    int requiredPos = new Double(sub.getDouble("autoBuyLimit")/order.auxPrice()).intValue();
-                                    order.minQty(requiredPos);
-                                    order.lmtPrice(i);
-                                    order.orderType(OrderType.LMT);
-                                } else {
-                                    continue;
-                                }
-                            }
-                            
-                           m_controller.placeOrModifyOrder(con, order, null);
-
-                        } // if (line.contains(orderToken))                        
-                    // Continue until "end of mail"
-                    } while (!StringUtils.containsIgnoreCase(line, eomToken) && (line != null));
-                    
-                    break; // out of for loop around Body Parts
-                }
-            }
-        } catch (IOException | NumberFormatException | MessagingException e) {
-            logger.error("msg {}.", e, e);
-        } catch (Exception e) {
-            logger.error("msg {}.", e, e);            
-        } finally { 
-            logger.info("Finisned processing msg from : {}", sub.get("fullname"));
-        }
-    }
-
-    
+        
     @Override 
     public void connected() {
         logger.info("Connected to TWS");
