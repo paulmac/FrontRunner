@@ -66,25 +66,30 @@ import java.time.Year;
 import java.util.Arrays;
 import org.bson.Document;
 
+//import com.google.common.collect.ImmutableList;
+
 //import com.mongodb.client.model.CreateCollectionOptions;
 //import com.mongodb.client.model.ValidationOptions;
 //import com.paulmac.trade.ImapMonitor;
 import java.util.Calendar;
+import java.util.Iterator;
 //import java.util.Date;
 //import java.util.Enumeration;
 import java.util.List;
 import java.util.Properties;
 //import java.util.Vector;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
+//import java.util.logging.Level;
 //import java.util.logging.Level;
 //import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
+//import org.jsoup.Jsoup;
+//import org.jsoup.nodes.TextNode;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ImapMonitorTws implements IConnectionHandler {
+ public class ImapMonitorTws implements IConnectionHandler {
     
    final static Logger logger = LoggerFactory.getLogger(ImapMonitorTws.class);
    
@@ -329,7 +334,7 @@ public class ImapMonitorTws implements IConnectionHandler {
         public IdleThread() { 
             super();
         }
-
+        
         public synchronized void kill() {
             if (!running)
                 return;
@@ -342,18 +347,19 @@ public class ImapMonitorTws implements IConnectionHandler {
                 try {
                     ensureOpen();
                     m_folder.getMessageCount(); // Prod before entering Idle()
-                    logger.info("Folder.idle() start @ {}", Calendar.getInstance().getTime());
                     ((IMAPFolder) m_folder).idle();
                 } catch (MessagingException me) {
                     logger.error(me.toString(), me);
                     try {
-                        // Something went wrong, wait and try again
                         TimeUnit.MILLISECONDS.sleep(100);
                     } catch (InterruptedException ie) {
                         logger.error(ie.toString(), ie);
-                    } catch (Exception e) {
+                    } catch (Exception e) {                        // Something went wrong, wait and try again
+
                         logger.error(e.toString(), e);
                     }
+                } finally {
+                    logger.info("Folder.idle() start @ {}", Calendar.getInstance().getTime());
                 }
             }
         }
@@ -366,7 +372,7 @@ public class ImapMonitorTws implements IConnectionHandler {
                 if (m_folder != null) {
                     if (!m_folder.isOpen() ) { /* && (m_folder.getType() & Folder.HOLDS_MESSAGES) != 0 */
                         m_folder.open(Folder.READ_WRITE);
-                        logger.info("In ensureOpen(). Open Folder {} Successful.", m_folder);
+                        logger.info("In ensureOpen(). Open Folder {} Successful.", m_folder, " @ ", Calendar.getInstance().getTime());
                         if (!m_folder.isOpen())
                             throw new FolderClosedException(m_folder);
                     }
@@ -375,7 +381,7 @@ public class ImapMonitorTws implements IConnectionHandler {
                     return;
                 }
             } catch (MessagingException e) {
-                logger.error("msg {}.", e.toString(), e);
+                logger.error("In ensureOpen() msg {}.", e.toString(), e);
             }
             // If all else fails .....
             openFolder();
@@ -401,21 +407,48 @@ public class ImapMonitorTws implements IConnectionHandler {
     private Double getBuyLimit(String[] words, int j) {
         while (!(words[j].equals("up") && words[j+1].equals("to")))
             j++;       
-        String retVal = words[j+2].replaceAll("^\\p{Punct}+|\\p{Punct}+$","");
+        String retVal;
+       retVal = words[j+2].replaceAll("^\\p{Punct}+|\\p{Punct}+$","");
         return new Double(retVal);                                            
     }
 
-    private void processMsgContent(String content, Document sub) {
+//    Saturday 1st -> Friday 21st.
+//    Sunday 1st -> Friday 20th
+//    Monday 1st -> Friday 19th
+//    Tuesday 1st -> Friday 18th
+//    Wednesday 1st -> Friday 17th
+//    Thursday 1st -> Friday 16th
+//    Friday 1st -> Friday 15th
+    public static Calendar fridayOfWeekInMonth(int month, int year, int week) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.DAY_OF_WEEK, Calendar.FRIDAY);
+        calendar.set(Calendar.DAY_OF_WEEK_IN_MONTH, week);
+        calendar.set(Calendar.MONTH, month);
+        calendar.set(Calendar.YEAR, year);
+        return calendar;
+    }
+    
+    private void processEmailContent(String content, Document sub) {
 
         Contract con = null; // Contract created for each Recomendation or "Order Line"
         Order order = null;
         String line = null;
         String orderStr = null;
         String orderToken = sub.getString("orderToken");
-
-//        int blockCnt = StringUtils.countMatches(content, orderToken);
-
-        String[] blocks = StringUtils.splitByWholeSeparator(content, orderToken);
+        String[] blocks = null;
+        
+        if (StringUtils.containsIgnoreCase(content, orderToken)) {
+            while (StringUtils.countMatches(content, orderToken) == 0) {
+                // Problem with capitalization perhaps ....?
+                if (StringUtils.contains(orderToken, "take")) {
+                    orderToken = StringUtils.replace(orderToken, "take", "Take");
+                } else {
+                    orderToken = StringUtils.substring(orderToken, 1, 7);
+                }
+            } 
+            
+            blocks = StringUtils.splitByWholeSeparator(content, orderToken);           
+        }
 
         // Process content in terms of Blocks of Recommendations
         for (int k = 1; k < blocks.length; k++) {
@@ -424,21 +457,46 @@ public class ImapMonitorTws implements IConnectionHandler {
                 con = null; // Contract created for each Recomendation or "Order Line"
 
                 order = new Order();
+//                order.account(m_acctInfoPanel.m_selAcct);
                 order.action(Types.Action.SSHORT); // Pmac: Should modify also in Ctor?
 
-                logger.info("Block {} ", block);
+                logger.info("Blocks {} ", block);
+
                 String[] lines = block.split("\\r?\\n");
+                Iterator<String> linesItr = Arrays.asList(lines).iterator();
+
+//                org.jsoup.nodes.Document jsoupDoc = Jsoup.parse(block);
+//                List<org.jsoup.nodes.Node> nodes = jsoupDoc.childNodes();
+//                
+//                for (org.jsoup.nodes.Node node: nodes) {
+//                    String t = node.toString();
+//                }
+//   for ( Element element : doc.getAllElements() )
+//    {
+//        for ( TextNode textNode : element.textNodes() )
+//        {
+//            final String text = textNode.text();
+//            builder.append( text );
+//            appendWhitespaceAfterTextIfNotThere( builder, text );
+//        }
+//    }
+//
+//    return builder.toString();
+                
                 int lnctr = 0;
                 StringBuilder sb = new StringBuilder(); // Has action "Sell" or "Buy" but may span another line or 2                                                
 
                 // Identify Order String and setup Order object
-                for (String l : lines) {
-                    logger.info("Block Line {} : {}", lnctr++, l);
-                    if (l.isEmpty()) {           
+		while (linesItr.hasNext()) {
+//                for (String line : linesList) {
+                    
+                    line = linesItr.next();
+                    logger.info("Block {} Line {} : {}", k, lnctr++, line);
 
-    //                    order = getOrder(sb.toString());
+                    if (line.isEmpty() && (sb.length() != 0)) { // ensure not the first (or leading) empty String          
+
                         orderStr = sb.toString();
-                        logger.info("{} Order: {} ", order.action(), orderStr);
+                        logger.info("Order: {} ", orderStr);
 
                         // get Order fields
                         if  (StringUtils.containsIgnoreCase(orderStr, "option")) { // containsorderStr.toLowerCase().contains("option")) {
@@ -455,14 +513,17 @@ public class ImapMonitorTws implements IConnectionHandler {
                                     Month month = Month.valueOf(m.toUpperCase());
                                     String y = words[j++];
                                     Year year = Year.of(new Integer(y));
-                                    Calendar c = Calendar.getInstance();
-                                    c.set(year.getValue(), month.ordinal(), 15, 0, 0);  
+//                                    Calendar c = Calendar.getInstance();
+//                                    c.set(year.getValue(), month.ordinal(), 15, 0, 0);
+                                    // Find first Friday on or after the 15th of the month, (equates to 3rd friday of the month)
+                                    Calendar c = fridayOfWeekInMonth(month.ordinal(), year.getValue(), 3);                                    
                                     SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
                                     con.lastTradeDateOrContractMonth(sdf.format(c.getTime()));
                                     con.strike(new Double(words[j++]));
                                     con.right(words[j++].toUpperCase());
                                     if (order.action().equals(Types.Action.BUY))
                                         order.auxPrice(getBuyLimit(words, j));
+                                    break; // don't need to process any more words
                                 }
                             }
                         } else {
@@ -484,7 +545,13 @@ public class ImapMonitorTws implements IConnectionHandler {
                             // Require Position from 'long store' PortfolioMap. Compare the Contract 
                             Position position = m_acctInfoPanel.findPosition(con);
                             if (position != null) {
-                                order.totalQuantity(position.position());
+                                if (StringUtils.containsIgnoreCase(orderStr, "half")) {
+                                    order.totalQuantity((position.position()/2));
+                                } else if (StringUtils.containsIgnoreCase(orderStr, "third")) {
+                                    order.totalQuantity((position.position()/3));
+                                } else {
+                                    order.totalQuantity(position.position());
+                                }
                                 order.orderType(OrderType.MKT);
                                 logger.info("Sell {} of {}", order.totalQuantity(), con.localSymbol());
                             } else {                                  
@@ -494,17 +561,21 @@ public class ImapMonitorTws implements IConnectionHandler {
                         } else {                            
                             // Rickards' subs talk about an 'assumed' entry price, 
                             // this is our preferred BUY 'limit price' 
-                            if (sub.getString("fullname").contains("Rickards")) {                                            
+                            if (sub.getString("fullname").contains("Rickards") && linesItr.hasNext()) {                                            
                                 do {                                                
-                                    l = lines[lnctr];
-                                    logger.info("Line {} : {}", lnctr++, l);
-                                } while (!StringUtils.containsIgnoreCase(l, "assuming"));
+//                                    line = lines[lnctr++];
+                                    line = linesItr.next();
+                                    logger.info("Line {} : {}", lnctr++, line);
+                                } while (!(StringUtils.containsIgnoreCase(line, "assuming")) && linesItr.hasNext());
 
-                                sb = new StringBuilder(StringUtils.substringAfter(l, "ssuming")); // avoid capital/lowercase issue for 'A' 
+                                sb = new StringBuilder(StringUtils.substringAfter(line, "ssuming")); // avoid capital/lowercase issue for 'A' 
                                 sb.append(" "); // so last word and first word of next string don't merge
-                                sb.append(lines[k]); // "assuming a $limitPrice .." may span more than 1 line
+                                if (linesItr.hasNext()) {
+                                    line = linesItr.next(); // lines[lnctr++];
+                                    sb.append(line); // "assuming a $limitPrice .." may span more than 1 line
+                                }
                                 String[] words = StringUtils.substringAfter(sb.toString(), "$").split("[^0-9.']+");                                            
-                                order.lmtPrice(new Double(words[0]));
+                                order.lmtPrice(new Double(words[0].replaceAll("^\\p{Punct}+|\\p{Punct}+$","")));
                             } else {
                                 order.lmtPrice(order.auxPrice()); // same thing for non Rickard's subs
                             }
@@ -520,8 +591,8 @@ public class ImapMonitorTws implements IConnectionHandler {
                                 rec.put("entryPrice", 0.0); // Agora published 'entry' price
                                 rec.put("limitPrice", order.lmtPrice());
                                 rec.put("buyUpToPrice", order.auxPrice());
-                                //                                rec.put("autoBuy", sub.getBoolean("autoBuy"));
-                                //                                rec.put("autoBuyLimit", sub.getDouble("autoBuyLimit"));
+//                                rec.put("autoBuy", sub.getBoolean("autoBuy"));
+//                                rec.put("autoBuyLimit", sub.getDouble("autoBuyLimit"));
                                 rec.put("subscription_id", sub.get("_id"));
                                 
                                 Document pos = new Document();
@@ -536,16 +607,18 @@ public class ImapMonitorTws implements IConnectionHandler {
 
                                 rec.append("positions", pos);
                                 m_recommendations.insertOne(rec);
-                            } catch (com.mongodb.MongoException e) {
+                                
+                                logger.info("Buy Order Stored in MongoDB");
+
+                            } catch (com.mongodb.MongoWriteException e) {
                                 logger.error("msg {}.", e, e);
                             }
                             
-                            logger.info("Buy Order Stored in MongoDB");
-
                             if (sub.getBoolean("autoBuy")) {
                                 // Use upToLimit position requested.
                                 int requiredPos = new Double(sub.getDouble("autoBuyLimit")/order.auxPrice()).intValue();
-                                order.minQty(requiredPos);
+                                order.minQty(requiredPos/2);
+                                order.totalQuantity(requiredPos);
     //                            order.lmtPrice(i);
                                 order.orderType(OrderType.LMT);
                             } else {
@@ -560,13 +633,17 @@ public class ImapMonitorTws implements IConnectionHandler {
                         break; // out of loop for this 'Block'
 
                     } else { // continue building "Order String"
-                        sb.append(l);
-                        sb.append(" ");
-                        if (order.action().equals(Types.Action.SSHORT))
-                        if (StringUtils.containsIgnoreCase(l, "buy"))
-                            order.action(Types.Action.BUY);
-                        else if (StringUtils.containsIgnoreCase(l, "sell"))
-                            order.action(Types.Action.SELL);
+                        if (!line.isEmpty()) {
+                            sb.append(line);
+                            sb.append(" ");
+                            if (order.action().equals(Types.Action.SSHORT))
+                                if (StringUtils.containsIgnoreCase(line, "buy"))
+                                    order.action(Types.Action.BUY);
+                                else if (StringUtils.containsIgnoreCase(line, "sell"))
+                                    order.action(Types.Action.SELL);
+                                else if (StringUtils.containsIgnoreCase(line, "hold"))
+                                    break; // out of this Block
+                        }
                     }
                 } // for (String l : lines) Process each line of a "Block" (i.e a reccommendation)
             } catch (NumberFormatException nfe) {
@@ -574,7 +651,7 @@ public class ImapMonitorTws implements IConnectionHandler {
             } catch (Exception e) {
                 logger.error("msg {}.", e, e);
             } finally {
-                logger.info("Finished ImapMonitorTws Startup");
+                logger.info("Finished Processing Msg from {}", sub.getString("fullname"));
             }                
         } // for (int k = 1; k < blockCnt; k++) Process loop of each "Block" (i.e a reccommendation)        
     }        
@@ -582,7 +659,7 @@ public class ImapMonitorTws implements IConnectionHandler {
 //    Stuff to do with actually processing of incoming mail
     public void openFolder() {
         try {              
-            logger.info("Entering openFolder()");
+            logger.info("Entering openFolder() @ {}", Calendar.getInstance().getTime());
             // Get a Session object
             Session session = Session.getInstance(m_props, null);
             session.setDebug(debug);
@@ -611,17 +688,17 @@ public class ImapMonitorTws implements IConnectionHandler {
                 /* Attempting to block the Folder Closed exception with Synchronized*/ 
                 public synchronized void messagesAdded(MessageCountEvent ev) { // pmac : not sure if I can use synchronized here?
                     
-                    // ensureOpen();  // pmac : not sure if necessary?
-
                     Message[] msgs = ev.getMessages();
+                    int fce = 0; // FolderClosedExcpetion counter
                     for (Message msg : msgs) {
-                        do { // keep trying to process same msg until finished i.e until folder is re-opened                                
+                        do { 
                             try {
                                 InternetAddress email = (InternetAddress)msg.getFrom()[0];
                                 String subject = msg.getSubject();
                                 String address = email.getAddress();
                                 String personal = StringUtils.replacePattern(email.getPersonal(), "[^a-zA-Z0-9.\\ ]+", ""); // to remove ambiguous ' or ’ 
                                 logger.info("Email arrived from : [{}] <{}> with Subject: {}", personal, address, subject);
+
                                 if (address.equals(m_advisorfirm_email)) {
                                     for (Document sub: m_subs) {
                                          // indicative of a Buy or Sell Recommendation(s) embedded in the body
@@ -629,21 +706,20 @@ public class ImapMonitorTws implements IConnectionHandler {
                                         if ((StringUtils.equals(personal, displayName))&& 
                                                 (StringUtils.containsIgnoreCase(subject,sub.getString("sellSubjectToken")) || 
                                                 StringUtils.containsIgnoreCase(subject,sub.getString("buySubjectToken")))) {
-                                            // find and process the individual Recommendation(s) in the msg
-//                                            process((MimeMessage)msg, sub);
+
+                                            // Can throw an fce
                                             Multipart multiPart = (Multipart) msg.getContent();
 
                                             for (int i = 0; i < multiPart.getCount(); i++) {
                                                 MimeBodyPart part = (MimeBodyPart) multiPart.getBodyPart(i);
                                                 if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) {
                                                     // this part is attachment
-                                                    // code to save attachment...
-                                                    logger.info("Part : {}", part.getDisposition());
+                                                    logger.info("Part is attachment : {}", part.getDisposition());
                                                 } else {
                                                     String content = (String)part.getContent();
                                                     new Thread(() -> {
-                                                        Thread.currentThread().setName("MsgProcessThread");
-                                                        processMsgContent(content, sub);
+                                                        Thread.currentThread().setName("EmailContentProcessThread");
+                                                        processEmailContent(content, sub);
                                                     }).start();
                                                 }
                                             }                                            
@@ -652,14 +728,22 @@ public class ImapMonitorTws implements IConnectionHandler {
                                     }
                                 }
                             } catch (IOException | MessagingException me) {
-                                logger.error("msg {}.", me,toString(), me);
-                                 ensureOpen(); // recursive
+                                logger.error("In messagesAdded() msg {} ", me,  me);
+                                fce++;
+                                try {
+                                    TimeUnit.MILLISECONDS.sleep(100); // Something went wrong, wait and try again
+                                } catch (InterruptedException ie) {
+                                    logger.error(ie.toString(), ie);
+                                } catch (Exception e) {                        
+                                    logger.error(e.toString(), e);
+                                } finally {
+                                    ensureOpen(); // recursive
+                                }
                             }
-                        } while (!m_folder.isOpen());
+                        } while (fce < 4); // Or until msg is successfully processed
                     }
                 }
             });
-
         } catch (MessagingException me) {
             logger.error("msg {}.", me,toString(), me);
             ensureOpen(); // recursive
@@ -709,13 +793,14 @@ public class ImapMonitorTws implements IConnectionHandler {
     }
 
     @Override public void show( final String str) {
-        logger.info("Show: {}", str);
         SwingUtilities.invokeLater(() -> {
-            m_msg.append(str);
-            m_msg.append( "\n\n");
-
-            Dimension d = m_msg.getSize();
-            m_msg.scrollRectToVisible( new Rectangle( 0, d.height, 1, 1) );
+            if (!StringUtils.isEmpty(str)) {
+                logger.info("Show: {}", str);
+                m_msg.append(str);
+                m_msg.append("\n\n");
+                Dimension d = m_msg.getSize();
+                m_msg.scrollRectToVisible( new Rectangle( 0, d.height, 1, 1) );
+            }
         });
     }
 
