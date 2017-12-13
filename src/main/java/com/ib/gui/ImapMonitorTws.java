@@ -54,11 +54,16 @@ import java.util.regex.Pattern;
 
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 //import com.mongodb.client.MongoCollection;
 //import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import static com.mongodb.client.model.Filters.*;
+import static com.mongodb.client.model.Updates.combine;
+import static com.mongodb.client.model.Updates.currentDate;
+import static com.mongodb.client.model.Updates.set;
+import com.mongodb.client.result.UpdateResult;
 //import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.time.Month;
@@ -79,6 +84,7 @@ import java.util.List;
 import java.util.Properties;
 //import java.util.Vector;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 //import java.util.logging.Level;
 //import java.util.logging.Level;
 //import java.util.stream.Stream;
@@ -136,7 +142,8 @@ import org.slf4j.LoggerFactory;
 //    private static final String regex ="[A-Z]{3,4}"; //alpha uppercase
 //    private static final String regExUpperCase = "([A-Z]{2,5}.)";
 //    private static final Pattern upper2to5 = Pattern.compile(regExUpperCase);
-    private static final List<String> m_exchanges = Arrays.asList("NYSE", "NASDAQ", "OTC", "OTCBB", "TSX", "sup3"); // "NASDAQ", not included - 6 chars
+    private static final List<String> m_exchanges_excludes = Arrays.asList("NYSE", "NASDAQ", "OTC", "OTCBB", "TSX", "MSCI", "ETF","sup3"); // "NASDAQ", not included - 6 chars
+    private static final List<String> m_expiry_wednesday = Arrays.asList("VIX");
 
 //    private boolean m_connected = false;
 
@@ -355,7 +362,6 @@ import org.slf4j.LoggerFactory;
                     } catch (InterruptedException ie) {
                         logger.error(ie.toString(), ie);
                     } catch (Exception e) {                        // Something went wrong, wait and try again
-
                         logger.error(e.toString(), e);
                     }
                 } finally {
@@ -419,23 +425,116 @@ import org.slf4j.LoggerFactory;
 //    Wednesday 1st -> Friday 17th
 //    Thursday 1st -> Friday 16th
 //    Friday 1st -> Friday 15th
-    public static Calendar fridayOfWeekInMonth(int month, int year, int week) {
+    public static Calendar expiryDayInMonth(int month, int year, String symbol) {
         Calendar calendar = Calendar.getInstance();
-        calendar.set(Calendar.DAY_OF_WEEK, Calendar.FRIDAY);
-        calendar.set(Calendar.DAY_OF_WEEK_IN_MONTH, week);
+        if (m_expiry_wednesday.contains(symbol))
+            calendar.set(Calendar.DAY_OF_WEEK, Calendar.WEDNESDAY);
+        else
+            calendar.set(Calendar.DAY_OF_WEEK, Calendar.FRIDAY);
+        calendar.set(Calendar.DAY_OF_WEEK_IN_MONTH, 3);
         calendar.set(Calendar.MONTH, month);
         calendar.set(Calendar.YEAR, year);
         return calendar;
+    }    
+
+    public void insertRecommendation(Contract con, Order order, String subId) {
+        
+        try {
+            Document rec = new Document();
+            rec.put("_id", con.localSymbol());
+            rec.put("symbol", con.symbol());
+            rec.put("secType", con.secType().toString());
+            rec.put("lastTradeDateOrContractMonth", con.lastTradeDateOrContractMonth());
+            rec.put("strike", con.strike());
+            rec.put("right", con.right().toString());
+            rec.put("entryPrice", 0.0); // Agora published 'entry' price
+            rec.put("limitPrice", order.lmtPrice());
+            rec.put("buyUpToPrice", order.auxPrice());
+            rec.put("receivedDate", Calendar.getInstance().getTime()); // Tue Sep 22 07:59:07 EDT 2009
+            rec.put("exitDate", "");
+            rec.put("subscription_id", subId);
+
+            Document posBson = new Document();
+            posBson.put("_id", con.localSymbol());
+            posBson.put("recommedation_id", con.localSymbol()); // same for first (default) position
+            posBson.put("exchange", "SMART");   // default
+            posBson.put("entryDate", "");       // Can be different to the received date of the Recommendation
+            posBson.put("currency", "USD");     // default
+            posBson.put("position", 0);         // initially, basically a placeholder
+            posBson.put("marketPrice", 0);      // initially, basically a placeholder
+            posBson.put("marketValue", 0);      // initially, basically a placeholder
+            posBson.put("averageCost", 0);      // initially, basically a placeholder
+            posBson.put("unrealPnl", 0);        // initially, basically a placeholder
+            posBson.put("realPnl", 0);          // initially, basically a placeholder
+
+            rec.append("positions", posBson);
+            m_recommendations.insertOne(rec);
+
+            logger.info("Buy Order for : {} Stored in MongoDB", con.localSymbol());
+
+        } catch (com.mongodb.MongoWriteException e) {
+            logger.error("msg {}.", e, e);
+        }    
     }
     
-    private void processEmailContent(String content, Document sub) {
+    public void updateRecommendation1to3(Position pos) {                
+        // The Position Collection is usually only 1 element so for efficiency search based on first element of Collection 
+        if ( m_recommendations.find(eq("positions.0._id", pos.contract().localSymbol())).iterator().hasNext()) {
+            UpdateResult result = m_recommendations.updateOne(eq("positions.0._id", pos.contract().localSymbol()), 
+            combine(set("positions.0.position", pos.position()), 
+                    set("positions.0.marketPrice", pos.marketPrice()), 
+                    set("positions.0.marketValue", pos.marketValue()), 
+                    set("positions.0.unrealPnl", pos.unrealPnl()) 
+                    )
+                );
+            if (result.wasAcknowledged() && result.isModifiedCountAvailable() && (result.getModifiedCount() == 1))
+                logger.info("Updated Recommedation  {}, Position {}, Market Price {}", pos.contract().localSymbol(), pos.position(), pos.marketPrice());
+        } else if ( m_recommendations.find(eq("positions.1._id", pos.contract().localSymbol())).iterator().hasNext()) {
+            UpdateResult result = m_recommendations.updateOne(eq("positions.1._id", pos.contract().localSymbol()), 
+            combine(set("positions.1.position", pos.position()), 
+                    set("positions.1.marketPrice", pos.marketPrice()), 
+                    set("positions.1.marketValue", pos.marketValue()), 
+                    set("positions.1.unrealPnl", pos.unrealPnl()) 
+                    )
+                );
+            if (result.wasAcknowledged() && result.isModifiedCountAvailable() && (result.getModifiedCount() == 1))
+                logger.info("Updated Recommedation  {}, Position {}, Market Price {}", pos.contract().localSymbol(), pos.position(), pos.marketPrice());            
+        } else if ( m_recommendations.find(eq("positions.2._id", pos.contract().localSymbol())).iterator().hasNext()) {
+            UpdateResult result = m_recommendations.updateOne(eq("positions.2._id", pos.contract().localSymbol()), 
+            combine(set("positions.2.position", pos.position()), 
+                    set("positions.2.marketPrice", pos.marketPrice()), 
+                    set("positions.2.marketValue", pos.marketValue()), 
+                    set("positions.2.unrealPnl", pos.unrealPnl()) 
+                    )
+                );
+            if (result.wasAcknowledged() && result.isModifiedCountAvailable() && (result.getModifiedCount() == 1))
+                logger.info("Updated Recommedation {}, Position {}, Market Price {}", pos.contract().localSymbol(), pos.position(), pos.marketPrice());            
+        } else {
+            logger.info("Recommedation {} Not found in DB, Position {}, Market Price {}", pos.contract().localSymbol(), pos.position(), pos.marketPrice());
+        }
+    }
+    
+    /**
+     *
+     * @param pos
+     */
+    public void updateRecommendation3toN(Position pos) {                
+        
+        for (int i = 2; i < 4; i++) {
+            String PosPrefix = new StringBuilder("positions.").append(i).toString();
+            UpdateResult result = m_recommendations.updateOne(eq(PosPrefix.concat("_id"), pos.contract().localSymbol()), 
+                    combine(set(PosPrefix.concat("position"), pos.position()), 
+                            set(PosPrefix.concat("marketPrice"), pos.marketPrice()), 
+                            set(PosPrefix.concat("marketValue"), pos.marketValue()), 
+                            set(PosPrefix.concat("unrealPnl"), pos.unrealPnl()) 
+                            )
+                        );
+            if (result.wasAcknowledged() && result.isModifiedCountAvailable() && (result.getModifiedCount() == 1))
+                return;
+        }
+    }
 
-        Contract con = null; // Contract created for each Recomendation or "Order Line"
-        Order order = null;
-        String line = null;
-        String orderStr = null;
-        String orderToken = sub.getString("orderToken");
-        String[] blocks = null;
+    public Iterator<String> splitBlocks(String content, String orderToken) {
         
         if (StringUtils.containsIgnoreCase(content, orderToken)) {
             while (StringUtils.countMatches(content, orderToken) == 0) {
@@ -447,41 +546,37 @@ import org.slf4j.LoggerFactory;
                 }
             } 
             
-            blocks = StringUtils.splitByWholeSeparator(content, orderToken);           
+            Iterator<String> itr = Arrays.asList(StringUtils.splitByWholeSeparator(content, orderToken)).iterator();
+            itr.next(); // not interested in first Block
+            return itr;         
         }
+        
+        return null;  
+    }
 
-        // Process content in terms of Blocks of Recommendations
-        for (int k = 1; k < blocks.length; k++) {
-            try {
-                String block = blocks[k].trim(); // remove leading whitespace
-                con = null; // Contract created for each Recomendation or "Order Line"
+    private void processEmailMsgContent(String content, Document sub) {
 
-                order = new Order();
+//        Contract con = null; // Contract created for each Recomendation or "Order Line"
+//        Order order = null;
+//        String orderToken = sub.getString("orderToken");
+//        String[] blockItr = null;
+        try {
+            
+            Iterator<String> blockItr = splitBlocks(content, sub.getString("orderToken"));
+
+            while(blockItr.hasNext()) {
+                String block = blockItr.next().trim(); // remove leading whitespace
+                Contract con = null; // Contract created for each Recomendation or "Order Line"
+
+                Order order = new Order();
 //                order.account(m_acctInfoPanel.m_selAcct);
                 order.action(Types.Action.SSHORT); // Pmac: Should modify also in Ctor?
+                String orderStr; // = null;
 
-                logger.info("Blocks {} ", block);
+                logger.info("Block {} ", block);
 
                 String[] lines = block.split("\\r?\\n");
                 Iterator<String> linesItr = Arrays.asList(lines).iterator();
-
-//                org.jsoup.nodes.Document jsoupDoc = Jsoup.parse(block);
-//                List<org.jsoup.nodes.Node> nodes = jsoupDoc.childNodes();
-//                
-//                for (org.jsoup.nodes.Node node: nodes) {
-//                    String t = node.toString();
-//                }
-//   for ( Element element : doc.getAllElements() )
-//    {
-//        for ( TextNode textNode : element.textNodes() )
-//        {
-//            final String text = textNode.text();
-//            builder.append( text );
-//            appendWhitespaceAfterTextIfNotThere( builder, text );
-//        }
-//    }
-//
-//    return builder.toString();
                 
                 int lnctr = 0;
                 StringBuilder sb = new StringBuilder(); // Has action "Sell" or "Buy" but may span another line or 2                                                
@@ -490,22 +585,25 @@ import org.slf4j.LoggerFactory;
 		while (linesItr.hasNext()) {
 //                for (String line : linesList) {
                     
-                    line = linesItr.next();
-                    logger.info("Block {} Line {} : {}", k, lnctr++, line);
+                    String line = linesItr.next();
+//                    logger.info("Line {} : {}", lnctr++, line);
 
                     if (line.isEmpty() && (sb.length() != 0)) { // ensure not the first (or leading) empty String          
 
                         orderStr = sb.toString();
                         logger.info("Order: {} ", orderStr);
 
-                        // get Order fields
-                        if  (StringUtils.containsIgnoreCase(orderStr, "option")) { // containsorderStr.toLowerCase().contains("option")) {
+                        // Check Order String contains keywords; "option", "Put" Or "Call" 
+                        if (StringUtils.containsIgnoreCase(orderStr, "option") &&
+                             (StringUtils.containsIgnoreCase(orderStr, "put") ||
+                              StringUtils.containsIgnoreCase(orderStr, "call"))) 
+                        {
 
                             String[] words = orderStr.split("[^a-zA-Z0-9.']+"); // \\P{Alpha}+ matches any non-alphabetic character '.' is for a possible decimal point
                             String w = words[0];
                             for (int j=0; j < words.length; j++) {
                                 w =  words[j];
-                                if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges.contains(w)) {
+                                if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges_excludes.contains(w)) {
 
                                     con = new OptContract(words[j++]); // ticker
                                     // Obtain : lastTradeDateOrContractMonth, double strike, String right) {
@@ -513,10 +611,8 @@ import org.slf4j.LoggerFactory;
                                     Month month = Month.valueOf(m.toUpperCase());
                                     String y = words[j++];
                                     Year year = Year.of(new Integer(y));
-//                                    Calendar c = Calendar.getInstance();
-//                                    c.set(year.getValue(), month.ordinal(), 15, 0, 0);
                                     // Find first Friday on or after the 15th of the month, (equates to 3rd friday of the month)
-                                    Calendar c = fridayOfWeekInMonth(month.ordinal(), year.getValue(), 3);                                    
+                                    Calendar c = expiryDayInMonth(month.ordinal(), year.getValue(), con.symbol());
                                     SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
                                     con.lastTradeDateOrContractMonth(sdf.format(c.getTime()));
                                     con.strike(new Double(words[j++]));
@@ -528,11 +624,10 @@ import org.slf4j.LoggerFactory;
                             }
                         } else {
                             String[] words = orderStr.split("[^a-zA-Z\\d*\\.\\d+]+"); // \\P{Alpha}+  matches any non-alphabetic character
-    //                                    for (String w:words) {                                    
                             for (int j=0; j < words.length; j++) {
                                 String w =  words[j];
                                 w = w.replaceAll("^\\p{Punct}+|\\p{Punct}+$","");
-                                if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges.contains(w)) {
+                                if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges_excludes.contains(w)) {
                                     con = new StkContract(w);
                                     if (order.action().equals(Types.Action.BUY))
                                         order.auxPrice(getBuyLimit(words, j));
@@ -553,11 +648,11 @@ import org.slf4j.LoggerFactory;
                                     order.totalQuantity(position.position());
                                 }
                                 order.orderType(OrderType.MKT);
-                                logger.info("Sell {} of {}", order.totalQuantity(), con.localSymbol());
-                            } else {                                  
-                                logger.info("No Position for {}", con.description());
-                                break; // ... out of Block but continue with rest of the Blocks;
-                            }
+                                
+                                m_controller.placeOrModifyOrder(con, order, null);
+                                                                
+//                                updateRecommendation(con, order);
+                            } 
                         } else {                            
                             // Rickards' subs talk about an 'assumed' entry price, 
                             // this is our preferred BUY 'limit price' 
@@ -580,56 +675,28 @@ import org.slf4j.LoggerFactory;
                                 order.lmtPrice(order.auxPrice()); // same thing for non Rickard's subs
                             }
 
-                            try {
-                                Document rec = new Document();
-                                rec.put("_id", con.localSymbol());
-                                rec.put("symbol", con.symbol());
-                                rec.put("secType", con.secType().toString());
-                                rec.put("lastTradeDateOrContractMonth", con.lastTradeDateOrContractMonth());
-                                rec.put("strike", con.strike());
-                                rec.put("right", con.right().toString());
-                                rec.put("entryPrice", 0.0); // Agora published 'entry' price
-                                rec.put("limitPrice", order.lmtPrice());
-                                rec.put("buyUpToPrice", order.auxPrice());
-//                                rec.put("autoBuy", sub.getBoolean("autoBuy"));
-//                                rec.put("autoBuyLimit", sub.getDouble("autoBuyLimit"));
-                                rec.put("subscription_id", sub.get("_id"));
-                                
-                                Document pos = new Document();
-                                pos.put("_id", con.localSymbol());
-                                pos.put("recommedation_id", con.localSymbol()); // same for first (default) position
-                                pos.put("exchange", "SMART");   // default
-                                pos.put("currency", "USD");     // default
-                                pos.put("position", 0);         // initially, basically a placeholder
-                                pos.put("averagePrice", 0.0);   // initially, basically a placeholder
-                                pos.put("currentPrice", 0.0);   // initially, basically a placeholder
-                                pos.put("percentGain", 0.0);    // initially, basically a placeholder
-
-                                rec.append("positions", pos);
-                                m_recommendations.insertOne(rec);
-                                
-                                logger.info("Buy Order Stored in MongoDB");
-
-                            } catch (com.mongodb.MongoWriteException e) {
-                                logger.error("msg {}.", e, e);
-                            }
-                            
                             if (sub.getBoolean("autoBuy")) {
                                 // Use upToLimit position requested.
-                                int requiredPos = new Double(sub.getDouble("autoBuyLimit")/order.auxPrice()).intValue();
-                                order.minQty(requiredPos/2);
-                                order.totalQuantity(requiredPos);
-    //                            order.lmtPrice(i);
-                                order.orderType(OrderType.LMT);
-                            } else {
-                                 break; // ... out of Block but continue with rest of the Blocks;
-                            }
+                                int requiredPos = new Double(sub.getDouble("autoBuyLimit")/order.lmtPrice()).intValue();
+                                    if(con instanceof OptContract)
+                                        requiredPos = requiredPos/100;
+                                    if (requiredPos > 1)
+                                        order.minQty(requiredPos/2);
+                                    else if (requiredPos == 1)
+                                        order.minQty(requiredPos);
+                                    
+                                    if (requiredPos > 0) {
+                                        order.totalQuantity(requiredPos);
+                                        order.orderType(OrderType.LMT);
+
+                                        m_controller.placeOrModifyOrder(con, order, null);
+                                    }
+                                
+                            } 
+                            
+                            insertRecommendation(con, order, sub.getString("_id"));
                         }
 
-                        m_controller.placeOrModifyOrder(con, order, null);
-                       
-                        logger.info("order {} sent to TWS.", con.localSymbol());
-                        
                         break; // out of loop for this 'Block'
 
                     } else { // continue building "Order String"
@@ -646,18 +713,61 @@ import org.slf4j.LoggerFactory;
                         }
                     }
                 } // for (String l : lines) Process each line of a "Block" (i.e a reccommendation)
-            } catch (NumberFormatException nfe) {
-                logger.error("msg {}.", nfe, nfe);
-            } catch (Exception e) {
-                logger.error("msg {}.", e, e);
-            } finally {
-                logger.info("Finished Processing Msg from {}", sub.getString("fullname"));
-            }                
-        } // for (int k = 1; k < blockCnt; k++) Process loop of each "Block" (i.e a reccommendation)        
+            } // for (int k = 1; k < blockCnt; k++) Process loop of each "Block" (i.e a reccommendation)        
+        } catch (NumberFormatException nfe) {
+            logger.error("msg {}.", nfe, nfe);
+        } catch (Exception e) {
+            logger.error("msg {}.", e, e);
+        } finally {
+            logger.info("Finished Processing Msg from {}", sub.getString("fullname"));
+        }                
     }        
+
+    private void processEmailMsg(Message msg) throws IOException, MessagingException {
+        
+        InternetAddress email = (InternetAddress)msg.getFrom()[0];
+        String subject = msg.getSubject();
+        String address = email.getAddress();
+        String personal = StringUtils.replacePattern(email.getPersonal(), "[^a-zA-Z0-9.\\ ]+", ""); // to remove ambiguous ' or ’ 
+        logger.info("Email arrived from : [{}] <{}> with Subject: {}", personal, address, subject);
+
+//                            if (address.equals(m_advisorfirm_email)) {
+        for (Document sub: m_subs) {
+             // indicative of a Buy or Sell Recommendation(s) embedded in the body
+            String displayName = StringUtils.replacePattern(sub.getString("fullname"), "[^a-zA-Z0-9.\\ ]+", "");
+            if ((StringUtils.equals(personal, displayName))&& 
+                    (StringUtils.containsIgnoreCase(subject,sub.getString("sellSubjectToken")) || 
+                    StringUtils.containsIgnoreCase(subject,sub.getString("buySubjectToken")) ||
+                    StringUtils.containsIgnoreCase(subject,"%"))) {
+
+                Multipart multiPart = (Multipart) msg.getContent();
+
+                for (int i = 0; i < multiPart.getCount(); i++) {
+                    MimeBodyPart part = (MimeBodyPart) multiPart.getBodyPart(i);
+                    if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) {
+                        logger.info("Part is attachment : {}", part.getDisposition());
+                    } else {
+                        String content = (String) part.getContent();
+                        new Thread(() -> {
+                            Thread.currentThread().setName("EmailContentProcessThread");
+                            processEmailMsgContent(content, sub);
+                        }).start();break;
+                    }
+                }                                            
+                return;
+            }
+        }
+    }
+
+    private void processEmailMsgs(Message[] msgs) throws IOException, MessagingException {
+        for (Message msg : msgs) {                            
+            processEmailMsg(msg);
+        }            
+    }
 
 //    Stuff to do with actually processing of incoming mail
     public void openFolder() {
+        
         try {              
             logger.info("Entering openFolder() @ {}", Calendar.getInstance().getTime());
             // Get a Session object
@@ -685,62 +795,18 @@ import org.slf4j.LoggerFactory;
             // Add messageCountListener to listen for new messages
             m_folder.addMessageCountListener(new MessageCountAdapter() {
                 @Override
-                /* Attempting to block the Folder Closed exception with Synchronized*/ 
-                public synchronized void messagesAdded(MessageCountEvent ev) { // pmac : not sure if I can use synchronized here?
-                    
-                    Message[] msgs = ev.getMessages();
-                    int fce = 0; // FolderClosedExcpetion counter
-                    for (Message msg : msgs) {
-                        do { 
-                            try {
-                                InternetAddress email = (InternetAddress)msg.getFrom()[0];
-                                String subject = msg.getSubject();
-                                String address = email.getAddress();
-                                String personal = StringUtils.replacePattern(email.getPersonal(), "[^a-zA-Z0-9.\\ ]+", ""); // to remove ambiguous ' or ’ 
-                                logger.info("Email arrived from : [{}] <{}> with Subject: {}", personal, address, subject);
-
-                                if (address.equals(m_advisorfirm_email)) {
-                                    for (Document sub: m_subs) {
-                                         // indicative of a Buy or Sell Recommendation(s) embedded in the body
-                                        String displayName = StringUtils.replacePattern(sub.getString("fullname"), "[^a-zA-Z0-9.\\ ]+", "");
-                                        if ((StringUtils.equals(personal, displayName))&& 
-                                                (StringUtils.containsIgnoreCase(subject,sub.getString("sellSubjectToken")) || 
-                                                StringUtils.containsIgnoreCase(subject,sub.getString("buySubjectToken")))) {
-
-                                            // Can throw an fce
-                                            Multipart multiPart = (Multipart) msg.getContent();
-
-                                            for (int i = 0; i < multiPart.getCount(); i++) {
-                                                MimeBodyPart part = (MimeBodyPart) multiPart.getBodyPart(i);
-                                                if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) {
-                                                    // this part is attachment
-                                                    logger.info("Part is attachment : {}", part.getDisposition());
-                                                } else {
-                                                    String content = (String)part.getContent();
-                                                    new Thread(() -> {
-                                                        Thread.currentThread().setName("EmailContentProcessThread");
-                                                        processEmailContent(content, sub);
-                                                    }).start();
-                                                }
-                                            }                                            
-                                            return;
-                                        }
-                                    }
-                                }
-                            } catch (IOException | MessagingException me) {
-                                logger.error("In messagesAdded() msg {} ", me,  me);
-                                fce++;
-                                try {
-                                    TimeUnit.MILLISECONDS.sleep(100); // Something went wrong, wait and try again
-                                } catch (InterruptedException ie) {
-                                    logger.error(ie.toString(), ie);
-                                } catch (Exception e) {                        
-                                    logger.error(e.toString(), e);
-                                } finally {
-                                    ensureOpen(); // recursive
-                                }
-                            }
-                        } while (fce < 4); // Or until msg is successfully processed
+                public void messagesAdded(MessageCountEvent ev) {
+                    try {
+                        processEmailMsgs(ev.getMessages());
+                    } catch (IOException | MessagingException me) {
+                        logger.error("Wait 100ms and try One more time .... {}  ", me,  me);
+                        try {
+                            TimeUnit.MILLISECONDS.sleep(100);
+                            ensureOpen();
+                            processEmailMsgs(ev.getMessages()); // Obtain from Folder rather than Event this time
+                        } catch (IOException | MessagingException | InterruptedException e) {
+                            logger.error("Failed 2nd time so lost this msg {} ", e,  e);                        
+                        } 
                     }
                 }
             });
@@ -775,21 +841,21 @@ import org.slf4j.LoggerFactory;
 
     @Override public void disconnected() {
         logger.info("Disconnected from TWS");
-            show( "disconnected");
-            m_connectionPanel.m_status.setText( "disconnected");
+        show( "disconnected");
+        m_connectionPanel.m_status.setText("disconnected");
     }
 
     @Override // Pmac
     public void storePosition(Position pos) {
-//        logger.info("Position Updated: {} pos={}", pos.contract().localSymbol(), pos.position());
-        logger.info("Position Updated: {} ", pos.toString());
+        updateRecommendation1to3(pos);
+        logger.info("Position Updated: {}", pos.toString());
     }
     
 
     @Override public void accountList(ArrayList<String> list) {
-            show( "Received account list");
-            m_acctList.clear();
-            m_acctList.addAll( list);
+        show( "Received account list");
+        m_acctList.clear();
+        m_acctList.addAll( list);
     }
 
     @Override public void show( final String str) {
@@ -805,11 +871,11 @@ import org.slf4j.LoggerFactory;
     }
 
     @Override public void error(Exception e) {
-            show( e.toString() );
+        show( e.toString() );
     }
 
     @Override public void message(int id, int errorCode, String errorMsg) {
-            show( id + " " + errorCode + " " + errorMsg);
+        show( id + " " + errorCode + " " + errorMsg);
     }
 	
     private class ConnectionPanel extends JPanel {
@@ -865,29 +931,48 @@ import org.slf4j.LoggerFactory;
         }
 
         protected void onConnect() {
-                int port = Integer.parseInt( m_port.getText() );
-                int clientId = Integer.parseInt( m_clientId.getText() );
-                controller().connect( m_host.getText(), port, clientId, m_connectOptionsTF.getText());
+            int port = Integer.parseInt( m_port.getText() );
+            int clientId = Integer.parseInt( m_clientId.getText() );
+            controller().connect( m_host.getText(), port, clientId, m_connectOptionsTF.getText());
         }
     }
 	
     private static class PanelLogger implements ILogger {
-            final private JTextArea m_area;
+        final private JTextArea m_area;
 
-            PanelLogger( JTextArea area) {
-                    m_area = area;
-            }
+        PanelLogger( JTextArea area) {
+                m_area = area;
+        }
 
-            @Override public void log(final String str) {
-                    SwingUtilities.invokeLater(() -> {
+        @Override public void log(final String str) {
+                SwingUtilities.invokeLater(() -> {
 //					m_area.append(str);
 //					
 //					Dimension d = m_area.getSize();
 //					m_area.scrollRectToVisible( new Rectangle( 0, d.height, 1, 1) );
-                    });
-            }
+                });
+        }
     }
 }
+
+// Soup Stuff .....
+//                org.jsoup.nodes.Document jsoupDoc = Jsoup.parse(block);
+//                List<org.jsoup.nodes.Node> nodes = jsoupDoc.childNodes();
+//                
+//                for (org.jsoup.nodes.Node node: nodes) {
+//                    String t = node.toString();
+//                }
+//   for ( Element element : doc.getAllElements() )
+//    {
+//        for ( TextNode textNode : element.textNodes() )
+//        {
+//            final String text = textNode.text();
+//            builder.append( text );
+//            appendWhitespaceAfterTextIfNotThere( builder, text );
+//        }
+//    }
+//
+//    return builder.toString();
 
 // do clearing support
 // change from "New" to something else
