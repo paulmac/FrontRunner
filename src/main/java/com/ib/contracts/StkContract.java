@@ -9,10 +9,16 @@ import com.ib.client.Types.SecType;
 public class StkContract extends Contract {
     public StkContract(String symbol) {
         symbol(symbol);
+        localSymbol(symbol);
         secType(SecType.STK.name());
         exchange("SMART");
         currency("USD");
     }
+
+//    @Override
+//    public String localSymbol() {
+//        return super.localSymbol();
+//    }
 
     @Override
     public boolean equals(Object obj) {
