@@ -56,7 +56,7 @@ import org.slf4j.LoggerFactory;
 
 public class ApiController implements EWrapper {
     
-   final static Logger logger = LoggerFactory.getLogger(ApiController.class);
+   final static Logger LOGGER = LoggerFactory.getLogger(ApiController.class);
     
     private final ApiConnection m_client;
     private final ILogger m_outLogger;
@@ -125,7 +125,7 @@ public class ApiController implements EWrapper {
         final EReaderSignal signal = new EJavaSignal();		
         final EReader reader = new EReader(client(), signal);
 
-        logger.info("Entering startMsgProcessingThread()");
+        LOGGER.info("Entering startMsgProcessingThread()");
 
         reader.setName("ReaderThread");
         reader.start();
@@ -144,7 +144,7 @@ public class ApiController implements EWrapper {
     }
 
     public void connect( String host, int port, int clientId, String connectionOpts ) {
-        logger.info("Entering connect()");
+        LOGGER.info("Entering connect()");
         if(!m_client.isConnected()){
             m_client.eConnect(host, port, clientId);
             startMsgProcessingThread();
@@ -257,14 +257,14 @@ public class ApiController implements EWrapper {
 	}
 
 	@Override public void updatePortfolio(Contract contract, double positionIn, double marketPrice, double marketValue, double averageCost, double unrealizedPNL, double realizedPNL, String account) {
-		contract.exchange( contract.primaryExch());
+            contract.exchange( contract.primaryExch());
 
-		Position position = new Position( contract, account, positionIn, marketPrice, marketValue, averageCost, unrealizedPNL, realizedPNL);
-		for( IAccountHandler handler : m_accountHandlers) {
-                    handler.updatePortfolio( position);
-                    m_connectionHandler.storePosition(position);
-		}
-		recEOM();
+            Position position = new Position( contract, account, positionIn, marketPrice, marketValue, averageCost, unrealizedPNL, realizedPNL);
+            for( IAccountHandler handler : m_accountHandlers) {
+                handler.updatePortfolio( position);
+                m_connectionHandler.storePosition(position);
+            }
+            recEOM();
 	}
 
 //        public Position findPosition(Contract contract) {
@@ -418,7 +418,7 @@ public class ApiController implements EWrapper {
 	}
 
 	public void reqContractDetails( Contract contract, final IContractDetailsHandler processor) {
-            logger.info("Entering reqContractDetails()");
+            LOGGER.info("Entering reqContractDetails()");
             if (!checkConnection())
                     return;
 
@@ -862,20 +862,22 @@ public class ApiController implements EWrapper {
 	}
 
 	public void placeOrModifyOrder(Contract contract, final Order order, final IOrderHandler handler) {
-            logger.info("Entering placeOrModifyOrder() Contract {}", contract.description());
-		if (!checkConnection())
-			return;
+            
+            LOGGER.info("{} {} of {}", order.action(), order.totalQuantity(), contract.localSymbol());
+	
+            if (!checkConnection())
+		return;
 
-		// when placing new order, assign new order id
-		if (order.orderId() == 0) {
-			order.orderId( m_orderId++);
-			if (handler != null) {
-				m_orderHandlers.put( order.orderId(), handler);
-			}
-		}
+            // when placing new order, assign new order id
+            if (order.orderId() == 0) {
+                    order.orderId( m_orderId++);
+                    if (handler != null) {
+                            m_orderHandlers.put( order.orderId(), handler);
+                    }
+            }
 
-//		m_client.placeOrder( contract, order);
-//		sendEOM();
+            m_client.placeOrder( contract, order);
+            sendEOM();
 	}
 
 	public void cancelOrder(int orderId) {
