@@ -33,8 +33,15 @@ import com.ib.client.Contract;
 import com.ib.util.NewTabbedPanel;
 import com.ib.util.NewTabbedPanel.INewTab;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+    
+
 public class AccountInfoPanel extends JPanel implements INewTab, IAccountHandler {
-	private DefaultListModel<String> m_acctList = new DefaultListModel<>();
+
+   final static Logger LOGGER = LoggerFactory.getLogger(AccountInfoPanel.class);
+   
+        private DefaultListModel<String> m_acctList = new DefaultListModel<>();
 	private JList<String> m_accounts = new JList<>( m_acctList);
 	private String m_selAcct = "";
 	private MarginModel m_marginModel = new MarginModel();
@@ -115,12 +122,14 @@ public class AccountInfoPanel extends JPanel implements INewTab, IAccountHandler
 		}
 	}
 	
-	/** Receive position. */
-	public synchronized void updatePortfolio( Position position) {
-		if (position.account().equals( m_selAcct)) {
-			m_portfolioModel.update( position);
-		}
-	}
+	/** Receive position.
+     * @param position */
+   @Override
+    public synchronized void updatePortfolio( Position position) {
+        if (position.account().equals( m_selAcct)) {
+                m_portfolioModel.update( position);
+        }
+    }
 
         public Position findPosition( Contract contract) {
             for(int i=1; i<m_portfolioModel.getRowCount(); i++){
@@ -131,14 +140,20 @@ public class AccountInfoPanel extends JPanel implements INewTab, IAccountHandler
 //                if (contract.equals(pos.contract()))
                     return pos;
             }
+            
+            LOGGER.info("No Position for {}", contract.description());
+            
             return null;
 	}
 
-	/** Receive time of last update. */
-	public void accountTime(String timeStamp) {
-		m_lastUpdated.setText( "Last updated: " + timeStamp + "       ");
-	}
+	/** Receive time of last update.
+     * @param timeStamp */
+   @Override
+    public void accountTime(String timeStamp) {
+        m_lastUpdated.setText( "Last updated: " + timeStamp + "       ");
+    }
 	
+   @Override
 	public void accountDownloadEnd(String account) {
 	}
 	
