@@ -64,6 +64,8 @@ import static com.mongodb.client.model.Updates.combine;
 import static com.mongodb.client.model.Updates.currentDate;
 import static com.mongodb.client.model.Updates.set;
 import com.mongodb.client.result.UpdateResult;
+import java.text.NumberFormat;
+import org.apache.commons.lang3.math.NumberUtils;
 //import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.time.Month;
@@ -81,6 +83,7 @@ import java.util.Iterator;
 //import java.util.Date;
 //import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 //import java.util.Vector;
 import java.util.concurrent.TimeUnit;
@@ -411,10 +414,29 @@ import org.slf4j.LoggerFactory;
     }
 
     private Double getBuyLimit(String[] words, int j) {
-        while (!(words[j].equals("up") && words[j+1].equals("to")))
-            j++;       
+        int i = j;
+        try {
+            while (!(words[i].equals("up") && words[i + 1].equals("to"))) {
+                i++;
+            }            
+        } catch (Exception e) {
+            //couldn't find the 'up to' expression so just look for a double
+//            Number number = null;
+            while (j < words.length) {
+                try {
+//                    number = NumberFormat.getCurrencyInstance(Locale.US).format(words[j]);
+                    return new Double(words[j]);
+                } catch(NumberFormatException pe) {
+                    j++;
+                }
+            }
+            
+            return 0.0;
+        }
+        
         String retVal;
-       retVal = words[j+2].replaceAll("^\\p{Punct}+|\\p{Punct}+$","");
+        retVal = words[i+2].replaceAll("^\\p{Punct}+|\\p{Punct}+$","");
+        
         return new Double(retVal);                                            
     }
 
@@ -556,13 +578,16 @@ import org.slf4j.LoggerFactory;
 
     private void processEmailMsgContent(String content, Document sub) {
 
-//        Contract con = null; // Contract created for each Recomendation or "Order Line"
-//        Order order = null;
-//        String orderToken = sub.getString("orderToken");
-//        String[] blockItr = null;
         try {
             
-            Iterator<String> blockItr = splitBlocks(content, sub.getString("orderToken"));
+            Iterator<String> blockItr;
+            
+            if (StringUtils.contains(content, sub.getString("orderToken")))
+                blockItr = splitBlocks(content, sub.getString("orderToken"));
+            else if (StringUtils.contains(content, sub.getString("orderToken2")))
+                blockItr = splitBlocks(content, sub.getString("orderToken2"));
+            else
+                return;
 
             while(blockItr.hasNext()) {
                 String block = blockItr.next().trim(); // remove leading whitespace
@@ -617,8 +642,22 @@ import org.slf4j.LoggerFactory;
                                     con.lastTradeDateOrContractMonth(sdf.format(c.getTime()));
                                     con.strike(new Double(words[j++]));
                                     con.right(words[j++].toUpperCase());
-                                    if (order.action().equals(Types.Action.BUY))
-                                        order.auxPrice(getBuyLimit(words, j));
+                                    if (order.action().equals(Types.Action.BUY)) {
+                                        if (StringUtils.containsIgnoreCase(orderStr, "up to")) {
+                                            for (int z = j; z < words.length; z++)
+                                                if (words[z].equals("up") && words[z+1].equals("to")) {
+                                                    order.auxPrice(new Double(words[z+2]));
+                                                    break;
+                                                }
+                                        } else { // Look for the next $amount in the Order String                                         
+                                            for (int z = j; z < words.length; z++)
+                                                if (NumberUtils.isCreatable(words[z])) {
+                                                    order.auxPrice(new Double(words[z]));
+                                                    break;
+                                                }
+                                        }
+                                    }
+                                        
                                     break; // don't need to process any more words
                                 }
                             }
@@ -641,9 +680,9 @@ import org.slf4j.LoggerFactory;
                             Position position = m_acctInfoPanel.findPosition(con);
                             if (position != null) {
                                 if (StringUtils.containsIgnoreCase(orderStr, "half")) {
-                                    order.totalQuantity((position.position()/2));
+                                    order.totalQuantity((int)position.position()/2);
                                 } else if (StringUtils.containsIgnoreCase(orderStr, "third")) {
-                                    order.totalQuantity((position.position()/3));
+                                    order.totalQuantity((int)position.position()/3);
                                 } else {
                                     order.totalQuantity(position.position());
                                 }
