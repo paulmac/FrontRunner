@@ -477,7 +477,7 @@ import org.slf4j.LoggerFactory;
             rec.put("subscription_id", subId);
 
             Document posBson = new Document();
-            posBson.put("_id", con.localSymbol());
+            posBson.put("_id", con.localSymbol());  // Composite Key including Account
             posBson.put("recommedation_id", con.localSymbol()); // same for first (default) position
             posBson.put("exchange", "SMART");   // default
             posBson.put("entryDate", "");       // Can be different to the received date of the Recommendation
@@ -501,22 +501,27 @@ import org.slf4j.LoggerFactory;
     
     public void updateRecommendation1to3(Position pos) {                
         // The Position Collection is usually only 1 element so for efficiency search based on first element of Collection 
-        if ( m_recommendations.find(eq("positions.0._id", pos.contract().localSymbol())).iterator().hasNext()) {
-            UpdateResult result = m_recommendations.updateOne(eq("positions.0._id", pos.contract().localSymbol()), 
-            combine(set("positions.0.position", pos.position()), 
-                    set("positions.0.marketPrice", pos.marketPrice()), 
-                    set("positions.0.marketValue", pos.marketValue()), 
-                    set("positions.0.unrealPnl", pos.unrealPnl()) 
+        if ( m_recommendations.find(eq("positions._id", pos.contract().localSymbol())).iterator().hasNext()) {
+            UpdateResult result = m_recommendations.updateOne(eq("positions._id", pos.contract().localSymbol()), 
+            combine(set("positions.position", pos.position()), 
+                    set("positions.marketPrice", pos.marketPrice()), 
+                    set("positions.marketValue", pos.marketValue()), 
+                    set("positions.unrealPnl", pos.unrealPnl()), 
+                    set("positions.averageCost", pos.averageCost()) 
                     )
                 );
             if (result.wasAcknowledged() && result.isModifiedCountAvailable() && (result.getModifiedCount() == 1))
                 logger.info("Updated Recommedation  {}, Position {}, Market Price {}", pos.contract().localSymbol(), pos.position(), pos.marketPrice());
+//            else
+//                logger.error("Recommedation  {}, Position {}, Market Price {} NOT FOUND in DB?!", pos.contract().localSymbol(), pos.position(), pos.marketPrice());
+                
         } else if ( m_recommendations.find(eq("positions.1._id", pos.contract().localSymbol())).iterator().hasNext()) {
             UpdateResult result = m_recommendations.updateOne(eq("positions.1._id", pos.contract().localSymbol()), 
             combine(set("positions.1.position", pos.position()), 
                     set("positions.1.marketPrice", pos.marketPrice()), 
                     set("positions.1.marketValue", pos.marketValue()), 
-                    set("positions.1.unrealPnl", pos.unrealPnl()) 
+                    set("positions.1.unrealPnl", pos.unrealPnl()), 
+                    set("positions.1.averageCost", pos.averageCost()) 
                     )
                 );
             if (result.wasAcknowledged() && result.isModifiedCountAvailable() && (result.getModifiedCount() == 1))
@@ -526,7 +531,8 @@ import org.slf4j.LoggerFactory;
             combine(set("positions.2.position", pos.position()), 
                     set("positions.2.marketPrice", pos.marketPrice()), 
                     set("positions.2.marketValue", pos.marketValue()), 
-                    set("positions.2.unrealPnl", pos.unrealPnl()) 
+                    set("positions.2.unrealPnl", pos.unrealPnl()), 
+                    set("positions.2.averageCost", pos.averageCost()) 
                     )
                 );
             if (result.wasAcknowledged() && result.isModifiedCountAvailable() && (result.getModifiedCount() == 1))
@@ -548,7 +554,8 @@ import org.slf4j.LoggerFactory;
                     combine(set(PosPrefix.concat("position"), pos.position()), 
                             set(PosPrefix.concat("marketPrice"), pos.marketPrice()), 
                             set(PosPrefix.concat("marketValue"), pos.marketValue()), 
-                            set(PosPrefix.concat("unrealPnl"), pos.unrealPnl()) 
+                            set(PosPrefix.concat("unrealPnl"), pos.unrealPnl()), 
+                            set(PosPrefix.concat("averageCost"), pos.averageCost())  
                             )
                         );
             if (result.wasAcknowledged() && result.isModifiedCountAvailable() && (result.getModifiedCount() == 1))
@@ -603,7 +610,7 @@ import org.slf4j.LoggerFactory;
                 String[] lines = block.split("\\r?\\n");
                 Iterator<String> linesItr = Arrays.asList(lines).iterator();
                 
-                int lnctr = 0;
+//                int lnctr = 0;
                 StringBuilder sb = new StringBuilder(); // Has action "Sell" or "Buy" but may span another line or 2                                                
 
                 // Identify Order String and setup Order object
@@ -675,9 +682,11 @@ import org.slf4j.LoggerFactory;
                             }
                         }                                            
 
+                        Position position = null; // Held in memory stack
+
                         if (order.action().equals(Types.Action.SELL)) {
                             // Require Position from 'long store' PortfolioMap. Compare the Contract 
-                            Position position = m_acctInfoPanel.findPosition(con);
+                            position = m_acctInfoPanel.findPosition(con);
                             if (position != null) {
                                 if (StringUtils.containsIgnoreCase(orderStr, "half")) {
                                     order.totalQuantity((int)position.position()/2);
@@ -693,13 +702,13 @@ import org.slf4j.LoggerFactory;
 //                                updateRecommendation(con, order);
                             } 
                         } else {                            
+                            
                             // Rickards' subs talk about an 'assumed' entry price, 
                             // this is our preferred BUY 'limit price' 
                             if (sub.getString("fullname").contains("Rickards") && linesItr.hasNext()) {                                            
                                 do {                                                
-//                                    line = lines[lnctr++];
                                     line = linesItr.next();
-                                    logger.info("Line {} : {}", lnctr++, line);
+                                    logger.info("Line : {}", line);
                                 } while (!(StringUtils.containsIgnoreCase(line, "assuming")) && linesItr.hasNext());
 
                                 sb = new StringBuilder(StringUtils.substringAfter(line, "ssuming")); // avoid capital/lowercase issue for 'A' 
@@ -715,25 +724,34 @@ import org.slf4j.LoggerFactory;
                             }
 
                             if (sub.getBoolean("autoBuy")) {
-                                // Use upToLimit position requested.
-                                int requiredPos = new Double(sub.getDouble("autoBuyLimit")/order.lmtPrice()).intValue();
-                                    if(con instanceof OptContract)
+                                
+                                int requiredPos = 0;
+                                // Test whether a reaffirm Rec.
+                                if (sub.getDouble("affirmBuyLimit") > 0.0) {
+                                    position = m_acctInfoPanel.findPosition(con);
+                                    if (position != null)
+                                        requiredPos = new Double(sub.getDouble("affirmBuyLimit")/order.lmtPrice()).intValue();                                    
+                                }
+                                
+                                if (position == null)
+                                    requiredPos = new Double(sub.getDouble("autoBuyLimit")/order.lmtPrice()).intValue();
+
+                                if (requiredPos > 0) {
+                                    if (con instanceof OptContract)
                                         requiredPos = requiredPos/100;
                                     if (requiredPos > 1)
                                         order.minQty(requiredPos/2);
                                     else if (requiredPos == 1)
-                                        order.minQty(requiredPos);
-                                    
-                                    if (requiredPos > 0) {
-                                        order.totalQuantity(requiredPos);
-                                        order.orderType(OrderType.LMT);
+                                        order.minQty(requiredPos);                                        
+                                    order.totalQuantity(requiredPos);
+                                    order.orderType(OrderType.LMT);
 
-                                        m_controller.placeOrModifyOrder(con, order, null);
-                                    }
-                                
+                                    m_controller.placeOrModifyOrder(con, order, null);
+                                }
                             } 
                             
-                            insertRecommendation(con, order, sub.getString("_id"));
+                            if (position == null)
+                                insertRecommendation(con, order, sub.getString("_id"));
                         }
 
                         break; // out of loop for this 'Block'
