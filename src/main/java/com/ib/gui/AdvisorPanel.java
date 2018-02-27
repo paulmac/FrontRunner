@@ -74,9 +74,9 @@ public class AdvisorPanel extends NewTabPanel implements IAdvisorHandler {
 
 	/** Called when the tab is first visited. */
 	@Override public void activated() {
-		ImapMonitorTws.INSTANCE.controller().reqAdvisorData( FADataType.GROUPS, this);
-		ImapMonitorTws.INSTANCE.controller().reqAdvisorData( FADataType.PROFILES, this );
-		ImapMonitorTws.INSTANCE.controller().reqAdvisorData( FADataType.ALIASES, this );
+		FrontRunnerTws.INSTANCE.twsController().reqAdvisorData( FADataType.GROUPS, this);
+		FrontRunnerTws.INSTANCE.twsController().reqAdvisorData( FADataType.PROFILES, this );
+		FrontRunnerTws.INSTANCE.twsController().reqAdvisorData( FADataType.ALIASES, this );
 	}
 	
 	/** Called when the tab is closed by clicking the X. */
@@ -195,7 +195,7 @@ public class AdvisorPanel extends NewTabPanel implements IAdvisorHandler {
 		}
 
 		public void transmit() {
-			ImapMonitorTws.INSTANCE.controller().updateGroups(m_groups);
+			FrontRunnerTws.INSTANCE.twsController().updateGroups(m_groups);
 		}
 
 		@Override public int getRowCount() {
@@ -309,7 +309,7 @@ public class AdvisorPanel extends NewTabPanel implements IAdvisorHandler {
 		}
 
 		public void transmit() {
-			ImapMonitorTws.INSTANCE.controller().updateProfiles( m_profiles);
+			FrontRunnerTws.INSTANCE.twsController().updateProfiles( m_profiles);
 		}
 
 		@Override public int getRowCount() {

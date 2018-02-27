@@ -30,7 +30,7 @@ class TopModel extends AbstractTableModel {
 	void addRow( Contract contract) {
 		TopRow row = new TopRow( this, contract.description(), m_parentPanel );
 		m_rows.add( row);
-		ImapMonitorTws.INSTANCE.controller().reqTopMktData(contract, "", false, false, row);
+		FrontRunnerTws.INSTANCE.twsController().reqTopMktData(contract, "", false, false, row);
 		fireTableRowsInserted( m_rows.size() - 1, m_rows.size() - 1);
 	}
 
@@ -42,7 +42,7 @@ class TopModel extends AbstractTableModel {
 	void removeSelectedRows() {
 		for(int rowIndex = m_rows.size() - 1; rowIndex >= 0; rowIndex--) {
 			if(m_rows.get(rowIndex).m_cancel) {
-				ImapMonitorTws.INSTANCE.controller().cancelTopMktData( m_rows.get(rowIndex));
+				FrontRunnerTws.INSTANCE.twsController().cancelTopMktData( m_rows.get(rowIndex));
 				m_rows.remove(rowIndex);
 			}
 		}		
@@ -51,7 +51,7 @@ class TopModel extends AbstractTableModel {
 	
 	void desubscribe() {
 		for (TopRow row : m_rows) {
-			ImapMonitorTws.INSTANCE.controller().cancelTopMktData( row);
+			FrontRunnerTws.INSTANCE.twsController().cancelTopMktData( row);
 		}
 	}		
 
@@ -146,7 +146,7 @@ class TopModel extends AbstractTableModel {
 	}	
 
 	public void cancel(int i) {
-		ImapMonitorTws.INSTANCE.controller().cancelTopMktData( m_rows.get( i) );
+		FrontRunnerTws.INSTANCE.twsController().cancelTopMktData( m_rows.get( i) );
 	}
 	
 	static class TopRow extends TopMktDataAdapter {

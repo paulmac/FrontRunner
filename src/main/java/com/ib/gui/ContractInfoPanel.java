@@ -64,7 +64,7 @@ class ContractInfoPanel extends JPanel {
 			
 			DetailsResultsPanel panel = new DetailsResultsPanel();
 			m_resultsPanels.addTab( m_contract.symbol() + " " + "Description", panel, true, true);
-			ImapMonitorTws.INSTANCE.controller().reqContractDetails(m_contract, panel);
+			FrontRunnerTws.INSTANCE.twsController().reqContractDetails(m_contract, panel);
 		}
 	}
 
@@ -129,7 +129,7 @@ class ContractInfoPanel extends JPanel {
 			FundaResultPanel panel = new FundaResultPanel();
 			FundamentalType type = m_type.getSelectedItem();
 			m_resultsPanels.addTab( m_contract.symbol() + " " + type, panel, true, true);
-			ImapMonitorTws.INSTANCE.controller().reqFundamentals( m_contract, type, panel); 
+			FrontRunnerTws.INSTANCE.twsController().reqFundamentals( m_contract, type, panel); 
 		}
 	}	
 	
@@ -164,7 +164,7 @@ class ContractInfoPanel extends JPanel {
 
 		/** Called when the tab is first visited. */
 		@Override public void activated() {
-			ImapMonitorTws.INSTANCE.controller().reqFundamentals(m_contract, FundamentalType.ReportRatios, this);
+			FrontRunnerTws.INSTANCE.twsController().reqFundamentals(m_contract, FundamentalType.ReportRatios, this);
 		}
 		
 		/** Called when the tab is closed by clicking the X. */

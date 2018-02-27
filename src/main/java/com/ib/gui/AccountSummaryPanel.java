@@ -61,11 +61,11 @@ public class AccountSummaryPanel extends NewTabPanel {
 	}
 	
 	private void subscribe() {
-		ImapMonitorTws.INSTANCE.controller().reqAccountSummary( "All", AccountSummaryTag.values(), m_model); 
+		FrontRunnerTws.INSTANCE.twsController().reqAccountSummary( "All", AccountSummaryTag.values(), m_model); 
 	}
 	
 	private void desubscribe() {
-		ImapMonitorTws.INSTANCE.controller().cancelAccountSummary( m_model);
+		FrontRunnerTws.INSTANCE.twsController().cancelAccountSummary( m_model);
 		m_model.clear();
 	}
 	
@@ -75,7 +75,7 @@ public class AccountSummaryPanel extends NewTabPanel {
 		boolean m_complete;
 
 		public void clear() {
-			ImapMonitorTws.INSTANCE.controller().cancelAccountSummary( this);
+			FrontRunnerTws.INSTANCE.twsController().cancelAccountSummary( this);
 			m_rows.clear();
 			m_map.clear();
 			m_complete = false;

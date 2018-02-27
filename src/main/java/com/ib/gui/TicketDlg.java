@@ -65,7 +65,7 @@ class TicketDlg extends JDialog {
 	private final ConditionsPanel m_conditionPanel;
 	
 	TicketDlg(Contract contract, Order order) {
-		super( ImapMonitorTws.INSTANCE.frame());
+		super( FrontRunnerTws.INSTANCE.frame());
 		
 		if (contract == null) {
 			contract = new Contract();
@@ -83,7 +83,7 @@ class TicketDlg extends JDialog {
 		
 		m_contractPanel = new ContractPanel( m_contract);
 		m_pegBenchPanel = new PegBenchPanel(this, m_order,
-				c -> lookupContract(ImapMonitorTws.INSTANCE.controller(), c));
+				c -> lookupContract(FrontRunnerTws.INSTANCE.twsController(), c));
 		m_advisorPanel = new AdvisorTicketPanel();
 		m_attribTicketPanel = new MiscTicketPanel();
 		m_volPanel = new VolatilityTicketPanel();
@@ -93,7 +93,7 @@ class TicketDlg extends JDialog {
 		m_orderPanel = new OrderPanel();
 		m_adjustedPanel = new AdjustedPanel(this, m_order);
 		m_conditionPanel = new ConditionsPanel(this, m_order,
-				c -> lookupContract(ImapMonitorTws.INSTANCE.controller(), c));
+				c -> lookupContract(FrontRunnerTws.INSTANCE.twsController(), c));
 		
 		HtmlButton transmitOrder = new HtmlButton( "Transmit Order") {
 			@Override public void actionPerformed() {
@@ -156,9 +156,9 @@ class TicketDlg extends JDialog {
 			dispose();
 		}
 
-		ImapMonitorTws.INSTANCE.controller().placeOrModifyOrder( m_contract, m_order, new IOrderHandler() {
+		FrontRunnerTws.INSTANCE.twsController().placeOrModifyOrder( m_contract, m_order, new IOrderHandler() {
 			@Override public void orderState(OrderState orderState) {
-				ImapMonitorTws.INSTANCE.controller().removeOrderHandler( this);
+				FrontRunnerTws.INSTANCE.twsController().removeOrderHandler( this);
 				SwingUtilities.invokeLater(() -> dispose());
 			}
 			@Override public void orderStatus(OrderStatus status, double filled, double remaining, double avgFillPrice, long permId, int parentId, double lastFillPrice, int clientId, String whyHeld) {
@@ -174,7 +174,7 @@ class TicketDlg extends JDialog {
 		scrape();
 		
 		m_order.whatIf( true);
-		ImapMonitorTws.INSTANCE.controller().placeOrModifyOrder( m_contract, m_order, new IOrderHandler() {
+		FrontRunnerTws.INSTANCE.twsController().placeOrModifyOrder( m_contract, m_order, new IOrderHandler() {
 			@Override public void orderState(final OrderState orderState) {
 				SwingUtilities.invokeLater(() -> displayMargin( orderState));
 			}
@@ -245,7 +245,7 @@ class TicketDlg extends JDialog {
 	}
 
 	class OrderPanel extends VerticalPanel {
-		final TCombo<String> m_account = new TCombo<>( ImapMonitorTws.INSTANCE.accountList().toArray(new String[0]) );
+		final TCombo<String> m_account = new TCombo<>( FrontRunnerTws.INSTANCE.accountList().toArray(new String[0]) );
 		final TCombo<Action> m_action = new TCombo<>( Action.values() );
 		final JTextField m_modelCode = new JTextField();
 		final UpperField m_quantity = new UpperField( "100");
@@ -262,7 +262,7 @@ class TicketDlg extends JDialog {
 		OrderPanel() {
 			m_orderType.removeItemAt( 0); // remove None
 			
-			m_account.setSelectedItem( m_order.account() != null ? m_order.account() : ImapMonitorTws.INSTANCE.accountList().get( 0) ); 
+			m_account.setSelectedItem( m_order.account() != null ? m_order.account() : FrontRunnerTws.INSTANCE.accountList().get( 0) ); 
 			m_modelCode.setText( m_order.modelCode() );
 			m_action.setSelectedItem( m_order.action() );
 			m_quantity.setText( m_order.totalQuantity());
@@ -454,7 +454,7 @@ class TicketDlg extends JDialog {
 			m_extOperator.setText(m_order.extOperator());
 			m_softDollarTiers.removeAllItems();
 			
-			ImapMonitorTws.INSTANCE.controller().reqSoftDollarTiers(tiers -> {
+			FrontRunnerTws.INSTANCE.twsController().reqSoftDollarTiers(tiers -> {
                 m_softDollarTiers.invalidate();
                 m_softDollarTiers.removeAllItems();
                 m_softDollarTiers.addItem(new SoftDollarTier("", "", ""));

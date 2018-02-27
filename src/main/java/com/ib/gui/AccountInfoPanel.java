@@ -82,11 +82,11 @@ public class AccountInfoPanel extends JPanel implements INewTab, IAccountHandler
 	
 	/** Called when the tab is first visited. */
 	@Override public void activated() {
-		for (String account : ImapMonitorTws.INSTANCE.accountList() ) {
+		for (String account : FrontRunnerTws.INSTANCE.accountList() ) {
 			m_acctList.addElement( account);
 		}
 		
-		if (ImapMonitorTws.INSTANCE.accountList().size() == 1) {
+		if (FrontRunnerTws.INSTANCE.accountList().size() == 1) {
 			m_accounts.setSelectedIndex( 0);
 		}
 	}
@@ -104,7 +104,7 @@ public class AccountInfoPanel extends JPanel implements INewTab, IAccountHandler
 				m_marginModel.clear();
 				m_mktValModel.clear();
 				m_portfolioModel.clear();
-				ImapMonitorTws.INSTANCE.controller().reqAccountUpdates(true, m_selAcct, this);
+				FrontRunnerTws.INSTANCE.twsController().reqAccountUpdates(true, m_selAcct, this);
 			}
 		}
 	}

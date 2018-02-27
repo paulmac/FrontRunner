@@ -41,6 +41,12 @@
             <artifactId>jsoup</artifactId>
             <version>1.10.3</version>
         </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>18.0</version>
+            <type>jar</type>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
@@ -53,7 +59,7 @@
                    </descriptorRefs>
                    <archive>
                       <manifest>
-                          <mainClass>com.ib.gui.ImapMonitorTws</mainClass>
+                          <mainClass>com.ib.gui.FrontRunnerTws</mainClass>
                       </manifest>
                    </archive>
                 </configuration>
@@ -74,6 +80,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <mainClass>com.ib.gui.ImapMonitorTws</mainClass>
+        <mainClass>com.ib.gui.FrontRunnerTws</mainClass>
     </properties>
 </project>

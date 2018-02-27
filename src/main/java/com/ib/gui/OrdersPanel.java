@@ -113,22 +113,22 @@ public class OrdersPanel extends JPanel {
 	}
 
 	protected void onTakeOverExisting() {
-		ImapMonitorTws.INSTANCE.controller().takeTwsOrders( m_model);
+		FrontRunnerTws.INSTANCE.twsController().takeTwsOrders( m_model);
 	}
 
 	protected void onTakeOverFuture() {
-		ImapMonitorTws.INSTANCE.controller().takeFutureTwsOrders( m_model);
+		FrontRunnerTws.INSTANCE.twsController().takeFutureTwsOrders( m_model);
 	}
 
 	protected void onCancel() {
 		OrderRow order = getSelectedOrder();
 		if (order != null) {
-			ImapMonitorTws.INSTANCE.controller().cancelOrder( order.m_order.orderId() );
+			FrontRunnerTws.INSTANCE.twsController().cancelOrder( order.m_order.orderId() );
 		}
 	}
 
 	protected void onCancelAll() {
-		ImapMonitorTws.INSTANCE.controller().cancelAllOrders();
+		FrontRunnerTws.INSTANCE.twsController().cancelAllOrders();
 	}
 
 	private OrderRow getSelectedOrder() {
@@ -165,7 +165,7 @@ public class OrdersPanel extends JPanel {
 	protected void onRefresh() {
 		m_model.clear();
 		m_model.fireTableDataChanged();
-		ImapMonitorTws.INSTANCE.controller().reqLiveOrders( m_model);
+		FrontRunnerTws.INSTANCE.twsController().reqLiveOrders( m_model);
 	}
 	
 	static class OrdersModel extends AbstractTableModel implements ILiveOrderHandler {

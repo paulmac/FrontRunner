@@ -58,7 +58,7 @@ public class MktDepthExchangesPanel extends NewTabPanel {
 	}
 
 	private void reqMktDepthExchanges() {
-		ImapMonitorTws.INSTANCE.controller().reqMktDepthExchanges( m_model);
+		FrontRunnerTws.INSTANCE.twsController().reqMktDepthExchanges( m_model);
 	}
 
 	private void clearMktDepthExchanges() {

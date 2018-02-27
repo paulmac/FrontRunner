@@ -51,7 +51,7 @@ public class TradesPanel extends JPanel implements ITradeReportHandler {
 	}
 	
 	private void onRefresh() {
-		ImapMonitorTws.INSTANCE.controller().reqExecutions( new ExecutionFilter(), this);
+		FrontRunnerTws.INSTANCE.twsController().reqExecutions( new ExecutionFilter(), this);
 	}
 
 	@Override public void tradeReport(String tradeKey, Contract contract, Execution trade) {

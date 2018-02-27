@@ -57,11 +57,11 @@ public class MarketValueSummaryPanel extends NewTabPanel implements IMarketValue
 	}
 
 	private void subscribe() {
-		ImapMonitorTws.INSTANCE.controller().reqMarketValueSummary( "All", this);
+		FrontRunnerTws.INSTANCE.twsController().reqMarketValueSummary( "All", this);
 	}
 
 	private void desubscribe() {
-		ImapMonitorTws.INSTANCE.controller().cancelMarketValueSummary( this);
+		FrontRunnerTws.INSTANCE.twsController().cancelMarketValueSummary( this);
 		m_model.clear();
 	}
 

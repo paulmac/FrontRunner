@@ -55,7 +55,7 @@ public class ExercisePanel extends HorzPanel implements INewTab, IAccountHandler
 			if (!selAcct.equals( m_selAcct) ) {
 				m_selAcct = selAcct;
 				m_portfolioModel.clear();
-				ImapMonitorTws.INSTANCE.controller().reqAccountUpdates(true, m_selAcct, this);
+				FrontRunnerTws.INSTANCE.twsController().reqAccountUpdates(true, m_selAcct, this);
 			}
 		}
 	}
@@ -85,7 +85,7 @@ public class ExercisePanel extends HorzPanel implements INewTab, IAccountHandler
 			int i = m_portTable.getSelectedRow();
 			if (i != -1 && account != null) {
 				Position position = m_portfolioModel.getPosition( i);
-				ImapMonitorTws.INSTANCE.controller().exerciseOption(account, position.contract(), m_combo.getSelectedItem(), m_qty.getInt(), m_override.isSelected() );
+				FrontRunnerTws.INSTANCE.twsController().exerciseOption(account, position.contract(), m_combo.getSelectedItem(), m_qty.getInt(), m_override.isSelected() );
 			}
 		}
 	}
@@ -99,7 +99,7 @@ public class ExercisePanel extends HorzPanel implements INewTab, IAccountHandler
         		
 	/** Called when the tab is first visited. */
 	@Override public void activated() {
-		for (String account : ImapMonitorTws.INSTANCE.accountList() ) {
+		for (String account : FrontRunnerTws.INSTANCE.accountList() ) {
 			m_acctList.addElement( account);
 		}
 	}

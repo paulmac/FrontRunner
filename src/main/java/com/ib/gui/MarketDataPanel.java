@@ -121,7 +121,7 @@ public class MarketDataPanel extends JPanel {
 			}
 			
 			
-			ImapMonitorTws.INSTANCE.controller().reqSmartComponents(m_BBOExchList.getSelectedItem(), m_smartComponentsResPanel);
+			FrontRunnerTws.INSTANCE.twsController().reqSmartComponents(m_BBOExchList.getSelectedItem(), m_smartComponentsResPanel);
 		}
 	}
 	
@@ -231,7 +231,7 @@ public class MarketDataPanel extends JPanel {
         void onRequestMatchingSymbols() {
             SymbolSamplesPanel symbolSamplesPanel = new SymbolSamplesPanel();
             m_resultsPanel.addTab( "Symbol Samples " + m_pattern.getText(), symbolSamplesPanel, true, true);
-            ImapMonitorTws.INSTANCE.controller().reqMatchingSymbols(m_pattern.getText(), symbolSamplesPanel);
+            FrontRunnerTws.INSTANCE.twsController().reqMatchingSymbols(m_pattern.getText(), symbolSamplesPanel);
         }
     }
 
@@ -360,7 +360,7 @@ public class MarketDataPanel extends JPanel {
 				}
 			};
 
-			m_marketDataType.addActionListener(event -> ImapMonitorTws.INSTANCE.controller().reqMktDataType( MarketDataType.getField(m_marketDataType.getSelectedItem())));
+			m_marketDataType.addActionListener(event -> FrontRunnerTws.INSTANCE.twsController().reqMktDataType( MarketDataType.getField(m_marketDataType.getSelectedItem())));
 
 			VerticalPanel paramPanel = new VerticalPanel();
 			paramPanel.add( "Market data type", m_marketDataType);
@@ -448,7 +448,7 @@ public class MarketDataPanel extends JPanel {
 			m_contractPanel.onOK();
 			DeepResultsPanel resultPanel = new DeepResultsPanel();
 			m_resultsPanel.addTab( "Deep " + m_contract.symbol(), resultPanel, true, true);
-			ImapMonitorTws.INSTANCE.controller().reqDeepMktData(m_contract, 6, resultPanel);
+			FrontRunnerTws.INSTANCE.twsController().reqDeepMktData(m_contract, 6, resultPanel);
 		}
 	}
 
@@ -479,7 +479,7 @@ public class MarketDataPanel extends JPanel {
 		}
 		
 		void onDesub() {
-			ImapMonitorTws.INSTANCE.controller().cancelDeepMktData( this);
+			FrontRunnerTws.INSTANCE.twsController().cancelDeepMktData( this);
 		}
 
 		@Override public void activated() {
@@ -487,7 +487,7 @@ public class MarketDataPanel extends JPanel {
 
 		/** Called when the tab is closed by clicking the X. */
 		@Override public void closed() {
-			ImapMonitorTws.INSTANCE.controller().cancelDeepMktData( this);
+			FrontRunnerTws.INSTANCE.twsController().cancelDeepMktData( this);
 		}
 		
 		@Override public void updateMktDepth(int pos, String mm, DeepType operation, DeepSide side, double price, int size) {
@@ -626,14 +626,14 @@ public class MarketDataPanel extends JPanel {
 			
 			HistogramResultsPanel panel = new HistogramResultsPanel();
 			
-			ImapMonitorTws.INSTANCE.controller().reqHistogramData(m_contract, m_duration.getInt(), m_durationUnit.getSelectedItem(), m_rthOnly.isSelected(), panel);
+			FrontRunnerTws.INSTANCE.twsController().reqHistogramData(m_contract, m_duration.getInt(), m_durationUnit.getSelectedItem(), m_rthOnly.isSelected(), panel);
 			m_resultsPanel.addTab("Histogram " + m_contract.symbol(), panel, true, true);
 		}
 
 		void onHistorical() {
 			m_contractPanel.onOK();
 			BarResultsPanel panel = new BarResultsPanel( true);
-			ImapMonitorTws.INSTANCE.controller().reqHistoricalData(m_contract, m_end.getText(), m_duration.getInt(), m_durationUnit.getSelectedItem(), m_barSize.getSelectedItem(), m_whatToShow.getSelectedItem(), m_rthOnly.isSelected(), panel);
+			FrontRunnerTws.INSTANCE.twsController().reqHistoricalData(m_contract, m_end.getText(), m_duration.getInt(), m_durationUnit.getSelectedItem(), m_barSize.getSelectedItem(), m_whatToShow.getSelectedItem(), m_rthOnly.isSelected(), panel);
 			m_resultsPanel.addTab( "Historical " + m_contract.symbol(), panel, true, true);
 		}
 	}
@@ -680,14 +680,14 @@ public class MarketDataPanel extends JPanel {
 			
 			HtsResultsPanel panel = new HtsResultsPanel();
 			
-			ImapMonitorTws.INSTANCE.controller().reqHeadTimestamp(m_contract, m_whatToShow.getSelectedItem(), m_rthOnly.isSelected(), panel);
+			FrontRunnerTws.INSTANCE.twsController().reqHeadTimestamp(m_contract, m_whatToShow.getSelectedItem(), m_rthOnly.isSelected(), panel);
 			m_resultsPanel.addTab( "Head time stamp " + m_contract.symbol(), panel, true, true);
 		}
 
 		void onRealTime() {
 			m_contractPanel.onOK();
 			BarResultsPanel panel = new BarResultsPanel( false);
-			ImapMonitorTws.INSTANCE.controller().reqRealTimeBars(m_contract, m_whatToShow.getSelectedItem(), m_rthOnly.isSelected(), panel);
+			FrontRunnerTws.INSTANCE.twsController().reqRealTimeBars(m_contract, m_whatToShow.getSelectedItem(), m_rthOnly.isSelected(), panel);
 			m_resultsPanel.addTab( "Real-time " + m_contract.symbol(), panel, true, true);
 		}
 	}
@@ -792,7 +792,7 @@ public class MarketDataPanel extends JPanel {
 
 		/** Called when the tab is closed by clicking the X. */
 		@Override public void closed() {
-			ImapMonitorTws.INSTANCE.controller().cancelHistogramData(this);
+			FrontRunnerTws.INSTANCE.twsController().cancelHistogramData(this);
 		}
 
 		private void fire() {
@@ -869,10 +869,10 @@ public class MarketDataPanel extends JPanel {
 		/** Called when the tab is closed by clicking the X. */
 		@Override public void closed() {
 			if (m_historical) {
-				ImapMonitorTws.INSTANCE.controller().cancelHistoricalData( this);
+				FrontRunnerTws.INSTANCE.twsController().cancelHistoricalData( this);
 			}
 			else {
-				ImapMonitorTws.INSTANCE.controller().cancelRealtimeBars( this);
+				FrontRunnerTws.INSTANCE.twsController().cancelRealtimeBars( this);
 			}
 		}
 
@@ -973,7 +973,7 @@ public class MarketDataPanel extends JPanel {
 			ScannerResultsPanel resultsPanel = new ScannerResultsPanel(m_parentPanel);
 			m_resultsPanel.addTab( sub.scanCode(), resultsPanel, true, true);
 
-			ImapMonitorTws.INSTANCE.controller().reqScannerSubscription( sub, resultsPanel);
+			FrontRunnerTws.INSTANCE.twsController().reqScannerSubscription( sub, resultsPanel);
 		}
 	}
 
@@ -995,7 +995,7 @@ public class MarketDataPanel extends JPanel {
 
 		/** Called when the tab is closed by clicking the X. */
 		@Override public void closed() {
-			ImapMonitorTws.INSTANCE.controller().cancelScannerSubscription( this);
+			FrontRunnerTws.INSTANCE.twsController().cancelScannerSubscription( this);
 			m_model.desubscribe();
 		}
 
@@ -1053,7 +1053,7 @@ public class MarketDataPanel extends JPanel {
 			String underlyingSecType = m_underlyingSecType.getText();
 			int underlyingConId = m_underlyingConId.getInt();
 			
-			ImapMonitorTws.INSTANCE.controller().reqSecDefOptParams( 
+			FrontRunnerTws.INSTANCE.twsController().reqSecDefOptParams( 
 					underlyingSymbol,
 					futFopExchange,
 //					currency,

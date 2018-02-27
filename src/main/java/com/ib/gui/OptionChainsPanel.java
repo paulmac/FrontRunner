@@ -71,7 +71,7 @@ class OptionChainsPanel extends JPanel {
 		};
 
 		m_marketDataType.addActionListener(event ->
-				ImapMonitorTws.INSTANCE.controller().reqMktDataType( MarketDataType.getField(m_marketDataType.getSelectedItem())));
+				FrontRunnerTws.INSTANCE.twsController().reqMktDataType( MarketDataType.getField(m_marketDataType.getSelectedItem())));
 		
 		VerticalPanel topPanel = new VerticalPanel();
 		topPanel.add( "Symbol", m_symbol);
@@ -94,12 +94,12 @@ class OptionChainsPanel extends JPanel {
 		m_underContract.exchange( m_exchange.getText().toUpperCase() ); 
 		m_underContract.currency( m_currency.getText().toUpperCase() ); 
 
-		ImapMonitorTws.INSTANCE.controller().reqContractDetails( m_underContract, this::onRecUnderDetails);
+		FrontRunnerTws.INSTANCE.twsController().reqContractDetails( m_underContract, this::onRecUnderDetails);
 	}
 
 	void onRecUnderDetails(ArrayList<ContractDetails> list) {
 		if (list.size() != 1) {
-			ImapMonitorTws.INSTANCE.show( "Error: " + list.size() + " underlying contracts returned");
+			FrontRunnerTws.INSTANCE.show( "Error: " + list.size() + " underlying contracts returned");
 			return;
 		}
 		
@@ -114,7 +114,7 @@ class OptionChainsPanel extends JPanel {
 		final ChainPanel symbolPanel = new ChainPanel();
 		m_tabbedPanel.addTab( optContract.symbol(), symbolPanel, true, true);
 		
-		ImapMonitorTws.INSTANCE.controller().reqContractDetails( optContract, symbolPanel);
+		FrontRunnerTws.INSTANCE.twsController().reqContractDetails( optContract, symbolPanel);
 	}
 	
 	private class ChainPanel extends NewTabPanel implements IContractDetailsHandler, ActionListener  {
@@ -153,7 +153,7 @@ class OptionChainsPanel extends JPanel {
 			
 			m_timer.start();
 			
-			ImapMonitorTws.INSTANCE.controller().reqTopMktData( m_underContract, "", false, false, m_stockListener);
+			FrontRunnerTws.INSTANCE.twsController().reqTopMktData( m_underContract, "", false, false, m_stockListener);
 		}
 		
 		/** Called when the tab is first visited. */
@@ -162,7 +162,7 @@ class OptionChainsPanel extends JPanel {
 
     	/** Called when the tab is closed by clicking the X. */
         @Override public void closed() {
-            ImapMonitorTws.INSTANCE.controller().cancelTopMktData( m_stockListener);
+            FrontRunnerTws.INSTANCE.twsController().cancelTopMktData( m_stockListener);
             m_putsModel.desubscribe();
             m_callsModel.desubscribe();
             m_timer.stop();
@@ -201,7 +201,7 @@ class OptionChainsPanel extends JPanel {
 			
             void desubscribe() {
                 for (ChainRow row : m_list) {
-                    ImapMonitorTws.INSTANCE.controller().cancelOptionMktData( row);
+                    FrontRunnerTws.INSTANCE.twsController().cancelOptionMktData( row);
                 }
             }
 			
@@ -218,7 +218,7 @@ class OptionChainsPanel extends JPanel {
 				ChainRow row = new ChainRow( contract);
 				m_list.add( row);
 				
-				ImapMonitorTws.INSTANCE.controller().reqOptionMktData(contract, "", snapshot, false, row);
+				FrontRunnerTws.INSTANCE.twsController().reqOptionMktData(contract, "", snapshot, false, row);
 				
 				if (snapshot) {
 					Util.sleep( 11); // try to avoid pacing violation at TWS

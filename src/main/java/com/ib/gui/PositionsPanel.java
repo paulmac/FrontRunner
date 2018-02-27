@@ -62,11 +62,11 @@ public class PositionsPanel extends NewTabPanel {
 	}
 	
 	private void subscribe() {
-		ImapMonitorTws.INSTANCE.controller().reqPositions( m_model);
+		FrontRunnerTws.INSTANCE.twsController().reqPositions( m_model);
 	}
 	
 	private void desubscribe() {
-		ImapMonitorTws.INSTANCE.controller().cancelPositions( m_model);
+		FrontRunnerTws.INSTANCE.twsController().cancelPositions( m_model);
 		m_model.clear();
 	}
 	

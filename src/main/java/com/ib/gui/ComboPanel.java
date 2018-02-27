@@ -74,7 +74,7 @@ public class ComboPanel extends JPanel implements INewTab {
 
 	/** Called when the tab is first visited. */
 	@Override public void activated() {
-		ImapMonitorTws.INSTANCE.controller().reqLiveOrders( m_ordersModel);
+		FrontRunnerTws.INSTANCE.twsController().reqLiveOrders( m_ordersModel);
 	}
 
 	/** Called when the tab is closed by clicking the X. */
@@ -172,7 +172,7 @@ public class ComboPanel extends JPanel implements INewTab {
 
 		protected void onAddLeg() {
 			m_contractPanel.onOK();
-			ImapMonitorTws.INSTANCE.controller().reqContractDetails( m_contract, list -> {
+			FrontRunnerTws.INSTANCE.twsController().reqContractDetails( m_contract, list -> {
                 for (ContractDetails details : list) {
                     addLeg( details);
                 }
@@ -311,14 +311,14 @@ public class ComboPanel extends JPanel implements INewTab {
 				dn.exchange( m_exchange.getText().toUpperCase() ); 
 				dn.currency( m_currency.getText().toUpperCase() ); 
 				
-				ImapMonitorTws.INSTANCE.controller().reqContractDetails(dn, list -> {
+				FrontRunnerTws.INSTANCE.twsController().reqContractDetails(dn, list -> {
                     if (list.size() == 1) {
                         Contract c = list.get( 0).contract();
                         m_dnContract = new DeltaNeutralContract( c.conid(), m_delta.getDouble(), m_price.getDouble() );
                         m_dnText.setText( String.format( "Delta-neutral: %s Delta: %s  Price: %s", c.description(), m_delta.getText(), m_price.getText() ) );
                     }
                     else {
-                        ImapMonitorTws.INSTANCE.show( "DN description does not define a uniqe contract");
+                        FrontRunnerTws.INSTANCE.show( "DN description does not define a uniqe contract");
                         m_dnContract = null;
                         m_dnText.setText( null);
                     }
@@ -401,7 +401,7 @@ public class ComboPanel extends JPanel implements INewTab {
 			fut.lastTradeDateOrContractMonth( m_lastTradeDate.getText() );
 			fut.currency( "USD");
 			
-			ImapMonitorTws.INSTANCE.controller().reqContractDetails( fut, new IContractDetailsHandler() {
+			FrontRunnerTws.INSTANCE.twsController().reqContractDetails( fut, new IContractDetailsHandler() {
 				@Override public void contractDetails(ArrayList<ContractDetails> list) {
 					// if two futures are returned, assume that the first is is no div prot and the 
 					// second one is div prot; unfortunately TWS does not send down the div prot flag
@@ -410,7 +410,7 @@ public class ComboPanel extends JPanel implements INewTab {
 						addFutLeg( list.get( i) );
 					}
 					else if (list.size() != 1) {
-						ImapMonitorTws.INSTANCE.show( "Request does not define a valid unique futures contract");
+						FrontRunnerTws.INSTANCE.show( "Request does not define a valid unique futures contract");
 					}
 					else {
 						addFutLeg( list.get( 0) );
@@ -427,7 +427,7 @@ public class ComboPanel extends JPanel implements INewTab {
 			stk.exchange( m_stkExch.getText() );
 			stk.currency( "USD");
 			
-			ImapMonitorTws.INSTANCE.controller().reqContractDetails( stk, list -> {
+			FrontRunnerTws.INSTANCE.twsController().reqContractDetails( stk, list -> {
                 for (ContractDetails data : list) {
                     addLeg( data.contract(), Action.SELL, 100);
                 }
@@ -498,7 +498,7 @@ public class ComboPanel extends JPanel implements INewTab {
 			void addRow(Contract contract) {
 				EfpRow row = new EfpRow( this, contract.description(), m_parentPanel );
 				m_rows.add( row);
-				ImapMonitorTws.INSTANCE.controller().reqEfpMktData( contract, "", false, false, row);
+				FrontRunnerTws.INSTANCE.twsController().reqEfpMktData( contract, "", false, false, row);
 				fireTableRowsInserted( m_rows.size() - 1, m_rows.size() - 1);
 			}
 

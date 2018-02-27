@@ -90,7 +90,7 @@ class AccountPositionsMultiPanel extends JPanel {
 			PositionsResultsPanel panel = new PositionsResultsPanel();
 			String account = m_requestPanel.m_account.getText().trim();
 			String modelCode = m_requestPanel.m_modelCode.getText().trim();
-			ImapMonitorTws.INSTANCE.controller().reqPositionsMulti(account, modelCode, panel);
+			FrontRunnerTws.INSTANCE.twsController().reqPositionsMulti(account, modelCode, panel);
 			m_resultsPanel.addTab( "Positions " + (!(account == null || account.isEmpty()) ? (" A:" + account) : "") 
 					+ (!(modelCode == null || modelCode.isEmpty()) ? (" M :" + modelCode) : ":"), panel, true, true);
 		}
@@ -140,7 +140,7 @@ class AccountPositionsMultiPanel extends JPanel {
 			
 			/** Called when the tab is closed by clicking the X. */
 			@Override public void closed() {
-				ImapMonitorTws.INSTANCE.controller().cancelPositionsMulti( this);
+				FrontRunnerTws.INSTANCE.twsController().cancelPositionsMulti( this);
 			}
 			
 			class PositionsModel extends AbstractTableModel {
@@ -222,7 +222,7 @@ class AccountPositionsMultiPanel extends JPanel {
 			String account = m_requestPanel.m_account.getText().trim();
 			String modelCode = m_requestPanel.m_modelCode.getText().trim();
 			boolean ledgerAndNLV = m_requestPanel.m_ledgerAndNLV.isSelected();
-			ImapMonitorTws.INSTANCE.controller().reqAccountUpdatesMulti(account, modelCode, ledgerAndNLV, panel);
+			FrontRunnerTws.INSTANCE.twsController().reqAccountUpdatesMulti(account, modelCode, ledgerAndNLV, panel);
 			m_resultsPanel.addTab( "Acc Updates " + (!(account == null || account.isEmpty()) ? (" A:" + account) : "") 
 					+ (!(modelCode == null || modelCode.isEmpty()) ? (" M :" + modelCode) : "") + (ledgerAndNLV ? " - LW" : ""), panel, true, true);
 		}
@@ -272,7 +272,7 @@ class AccountPositionsMultiPanel extends JPanel {
 			
 			/** Called when the tab is closed by clicking the X. */
 			@Override public void closed() {
-				ImapMonitorTws.INSTANCE.controller().cancelAccountUpdatesMulti( this);
+				FrontRunnerTws.INSTANCE.twsController().cancelAccountUpdatesMulti( this);
 			}
 			
 			class AccountUpdatesModel extends AbstractTableModel {

@@ -103,7 +103,7 @@ class NewsPanel extends JPanel {
             NewsArticleResultsPanel panel = new NewsArticleResultsPanel();
             String providerCode = m_requestPanel.m_providerCode.getText().trim();
             String articleId = m_requestPanel.m_articleId.getText().trim();
-            ImapMonitorTws.INSTANCE.controller().reqNewsArticle(providerCode, articleId, panel);
+            FrontRunnerTws.INSTANCE.twsController().reqNewsArticle(providerCode, articleId, panel);
             m_resultsPanels.addTab( "News Article: " + providerCode + " " + articleId, panel, true, true);
         }
     }
@@ -147,7 +147,7 @@ class NewsPanel extends JPanel {
         void onRequestNewsProviders() {
             NewsProvidersPanel newsProvidersPanel = new NewsProvidersPanel();
             m_resultsPanels.addTab("News Providers", newsProvidersPanel, true, true);
-            ImapMonitorTws.INSTANCE.controller().reqNewsProviders(newsProvidersPanel);
+            FrontRunnerTws.INSTANCE.twsController().reqNewsProviders(newsProvidersPanel);
         }
     }
 
@@ -269,7 +269,7 @@ class NewsPanel extends JPanel {
 
             NewsTicksResultsPanel panel = new NewsTicksResultsPanel();
             m_resultsPanels.addTab( "News Ticks: " + contract.symbol(), panel, true, true);
-            ImapMonitorTws.INSTANCE.controller().reqNewsTicks(contract, panel);
+            FrontRunnerTws.INSTANCE.twsController().reqNewsTicks(contract, panel);
         }
     }
 
@@ -406,7 +406,7 @@ class NewsPanel extends JPanel {
         void onRequestHistoricalNews() {
             HistoricalNewsResultsPanel panel = new HistoricalNewsResultsPanel();
             m_resultsPanels.addTab( "Hist News: " + m_conId.getText(), panel, true, true);
-            ImapMonitorTws.INSTANCE.controller().reqHistoricalNews(m_conId.getInt(), m_providerCodes.getText(), 
+            FrontRunnerTws.INSTANCE.twsController().reqHistoricalNews(m_conId.getInt(), m_providerCodes.getText(), 
                 m_startDateTime.getText(), m_endDateTime.getText(), m_totalResults.getInt(), panel);
         }
     }

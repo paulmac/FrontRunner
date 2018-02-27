@@ -108,7 +108,7 @@ public class ApiController implements EWrapper {
             void connected();
             void disconnected();
             void accountList(ArrayList<String> list);
-            void storePosition(Position pos); // Pmac
+            void updatePosition(Position pos); // Pmac
             void error(Exception e);
             void message(int id, int errorCode, String errorMsg);
             void show(String string);
@@ -262,7 +262,7 @@ public class ApiController implements EWrapper {
             Position position = new Position( contract, account, positionIn, marketPrice, marketValue, averageCost, unrealizedPNL, realizedPNL);
             for( IAccountHandler handler : m_accountHandlers) {
                 handler.updatePortfolio( position);
-                m_connectionHandler.storePosition(position);
+                m_connectionHandler.updatePosition(position);
             }
             recEOM();
 	}
@@ -863,7 +863,7 @@ public class ApiController implements EWrapper {
 
 	public void placeOrModifyOrder(Contract contract, final Order order, final IOrderHandler handler) {
             
-            LOGGER.info("{} {} of {}", order.action(), order.totalQuantity(), contract.localSymbol());
+            LOGGER.info("{} {} of : {}", order.action(), order.totalQuantity(), contract.localSymbol());
 	
             if (!checkConnection())
 		return;

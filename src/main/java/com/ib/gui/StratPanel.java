@@ -112,7 +112,7 @@ public class StratPanel extends StackPanel implements IHistoricalDataHandler, IR
 	
 	protected void onStart() {
 		m_contractPanel.onOK();
-		ImapMonitorTws.INSTANCE.controller().reqRealTimeBars(m_contract, WhatToShow.TRADES, false, this);
+		FrontRunnerTws.INSTANCE.twsController().reqRealTimeBars(m_contract, WhatToShow.TRADES, false, this);
 	}
 
 	@Override public void realtimeBar(Bar bar) {
@@ -121,7 +121,7 @@ public class StratPanel extends StackPanel implements IHistoricalDataHandler, IR
 			QueryLength queryLength = getQueryLength( barSize);
 			String date = Bar.format( bar.time() * 1000);
 			int duration = m_bars.getInt() * queryLength.m_units;
-			ImapMonitorTws.INSTANCE.controller().reqHistoricalData(m_contract, date, duration, queryLength.m_unit, barSize, WhatToShow.TRADES, false, this);
+			FrontRunnerTws.INSTANCE.twsController().reqHistoricalData(m_contract, date, duration, queryLength.m_unit, barSize, WhatToShow.TRADES, false, this);
 			m_req = true;
 		}
 		addBar( bar);
@@ -156,8 +156,8 @@ public class StratPanel extends StackPanel implements IHistoricalDataHandler, IR
 	}
 
 	protected void onStop() {
-		ImapMonitorTws.INSTANCE.controller().cancelRealtimeBars(this);
-		ImapMonitorTws.INSTANCE.controller().cancelHistoricalData(this);
+		FrontRunnerTws.INSTANCE.twsController().cancelRealtimeBars(this);
+		FrontRunnerTws.INSTANCE.twsController().cancelHistoricalData(this);
 	}
 
 	void add( JPanel p, Object...objs) {

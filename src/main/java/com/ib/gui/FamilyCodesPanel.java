@@ -57,7 +57,7 @@ public class FamilyCodesPanel extends NewTabPanel {
 	}
 
 	private void requestFamilyCodes() {
-		ImapMonitorTws.INSTANCE.controller().reqFamilyCodes( m_model);
+		FrontRunnerTws.INSTANCE.twsController().reqFamilyCodes( m_model);
 	}
 
 	private void clearFamilyCodes() {
