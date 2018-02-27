@@ -100,7 +100,7 @@ public class MongoController {
         logger.info("Imap CoOrds : {} ", IMAP_COORDS.toString());
     }     
 
-    public void insertRecommendation(Contract con, Order order, String subId) {
+    public void createRecommendation(Contract con, Order order, String subId) {
         
         try {
             Document rec = new Document();

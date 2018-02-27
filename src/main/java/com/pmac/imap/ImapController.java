@@ -443,7 +443,7 @@ public class ImapController {
                             } 
                             
                             if (position == null)
-                                FrontRunnerTws.INSTANCE.mongoController().insertRecommendation(con, order, sub.getString("_id"));
+                                FrontRunnerTws.INSTANCE.mongoController().createRecommendation(con, order, sub.getString("_id"));
                         }
 
                         break; // out of loop for this 'Block'

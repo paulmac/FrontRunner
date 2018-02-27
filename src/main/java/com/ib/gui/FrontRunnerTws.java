@@ -532,7 +532,7 @@ import org.slf4j.LoggerFactory;
 //        return calendar;
 //    }    
 
-//    public void insertRecommendation(Contract con, Order order, String subId) {
+//    public void createRecommendation(Contract con, Order order, String subId) {
 //        
 //        try {
 //            Document rec = new Document();
@@ -869,7 +869,7 @@ import org.slf4j.LoggerFactory;
 //                            } 
 //                            
 //                            if (position == null)
-//                                m_mongo.insertRecommendation(con, order, sub.getString("_id"));
+//                                m_mongo.createRecommendation(con, order, sub.getString("_id"));
 //                        }
 //
 //                        break; // out of loop for this 'Block'
