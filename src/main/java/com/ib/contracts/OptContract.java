@@ -5,11 +5,11 @@ package com.ib.contracts;
 
 import com.ib.client.Contract;
 import com.ib.client.Types.SecType;
+import com.ib.client.Types.Right;
 import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-    
+import org.slf4j.LoggerFactory;    
 
 public class OptContract extends Contract {
 
@@ -22,7 +22,7 @@ public class OptContract extends Contract {
     public OptContract(String symbol, String exchange, String lastTradeDateOrContractMonth, double strike, String right) {
         symbol(symbol);
         secType(SecType.OPT.name());
-        exchange("SMART");
+        exchange("CBOE2");
         currency("USD");
         lastTradeDateOrContractMonth(lastTradeDateOrContractMonth);
         strike(strike);
@@ -34,12 +34,12 @@ public class OptContract extends Contract {
     public OptContract(String symbol) {
         secType(SecType.OPT.name());
         this.symbol(symbol);
-        this.exchange("SMART");
+        this.exchange("CBOE2"); // SMART
         currency("USD");
     }
 
     
-        @Override
+    @Override
     public boolean equals(Object obj) {
     
     	if (this == obj) {
@@ -52,17 +52,25 @@ public class OptContract extends Contract {
 
         Contract other = (Contract)obj;
         
-        // Light comparison
-        if (this.symbol().equals(other.symbol()) &&
-                // The Day section has no significance
-                this.lastTradeDateOrContractMonth().regionMatches(0, other.lastTradeDateOrContractMonth(), 0, 6) &&
-                this.right().equals(other.right())&&
-                this.secType().equals(other.secType())) {
-            
-            // fix it up
-            this.localSymbol(other.localSymbol());
-            this.lastTradeDateOrContractMonth(other.lastTradeDateOrContractMonth()); 
-            return true;
+        if (this.right().equals(Right.None))  {
+            // Super Light comparison
+            if (this.symbol().equals(other.symbol())) {
+                // fix it up
+                this.right(other.right());
+                this.localSymbol(other.localSymbol());
+                this.lastTradeDateOrContractMonth(other.lastTradeDateOrContractMonth()); 
+                return true;               
+            }
+        } else {
+            // Light comparison
+            if (this.symbol().equals(other.symbol()) && 
+                    // The Day section has no significance
+                    this.lastTradeDateOrContractMonth().regionMatches(0, other.lastTradeDateOrContractMonth(), 0, 6) &&
+                    this.right().equals(other.right())) {
+                // fix it up
+                this.lastTradeDateOrContractMonth(other.lastTradeDateOrContractMonth()); 
+                return true;
+            }
         }
         
         return false;

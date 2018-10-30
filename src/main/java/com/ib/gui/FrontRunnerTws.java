@@ -201,11 +201,14 @@ import org.slf4j.LoggerFactory;
             show(str);
             show(message);
         });
-
+        
         // Setup other Controllers
         mongoController();
 
         imapController();
+
+        // Force request of Portfolio
+        m_acctInfoPanel.activated();
     }
 
     @Override public void disconnected() {

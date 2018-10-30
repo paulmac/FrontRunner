@@ -61,7 +61,7 @@ public class PositionsPanel extends NewTabPanel {
 		desubscribe();
 	}
 	
-	private void subscribe() {
+	public void subscribe() {
 		FrontRunnerTws.INSTANCE.twsController().reqPositions( m_model);
 	}
 	

@@ -132,13 +132,16 @@ public class AccountInfoPanel extends JPanel implements INewTab, IAccountHandler
     }
 
         public Position findPosition( Contract contract) {
-            for(int i=1; i<m_portfolioModel.getRowCount(); i++){
+            for(int i=1; i<m_portfolioModel.getRowCount(); i++) {
                 Position pos = m_portfolioModel.getPosition(i);
 //                Contract other = pos.contract();
-                // Light comparison
-                if (contract.equals(pos.contract()))
-//                if (contract.equals(pos.contract()))
-                    return pos;
+                // Has to be the same Security Type
+                if (contract.getSecType().equals(pos.contract().getSecType()))
+                    if (contract.equals(pos.contract())) {
+//                      if (contract.equals(pos.contract()))
+                        LOGGER.info("Position found : {}", pos.contract().localSymbol());
+                        return pos;
+                    }
             }
             
             LOGGER.info("No Position for {}", contract.description());
