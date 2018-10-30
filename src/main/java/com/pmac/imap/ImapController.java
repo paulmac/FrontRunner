@@ -294,32 +294,23 @@ public class ImapController {
                 String[] lines = block.split("\\r?\\n");
                 Iterator<String> linesItr = Arrays.asList(lines).iterator();
 
-//                int lnctr = 0;
                 StringBuilder sb = new StringBuilder(); // Has action "Sell" or "Buy" but may span another line or 2                                                
 
                 // Identify Order String and setup Order object
                 while (linesItr.hasNext()) {
-//                for (String line : linesList) {
-
                     String line = linesItr.next();
-//                    logger.info("Line {} : {}", lnctr++, line);
-
                     if (line.isEmpty() && (sb.length() != 0)) { // ensure not the first (or leading) empty String          
-
                         orderStr = sb.toString();
                         logger.info("Order: {} ", orderStr);
-
                         // Check Order String contains keywords; "option", "Put" Or "Call" 
                         if (StringUtils.containsIgnoreCase(orderStr, "option")
                                 && (StringUtils.containsIgnoreCase(orderStr, "put")
                                 || StringUtils.containsIgnoreCase(orderStr, "call"))) {
-
                             String[] words = orderStr.split("[^a-zA-Z0-9.']+"); // \\P{Alpha}+ matches any non-alphabetic character '.' is for a possible decimal point
                             String w = words[0];
                             for (int j = 0; j < words.length; j++) {
                                 w = words[j];
                                 if (Pattern.matches("([A-Z]{2,5})", w) && !m_exchanges_excludes.contains(w)) {
-
                                     con = new OptContract(words[j++]); // ticker
                                     // Obtain : lastTradeDateOrContractMonth, double strike, String right) {
                                     String m = words[j++];
@@ -335,11 +326,6 @@ public class ImapController {
                                     if (order.action().equals(Types.Action.BUY)) {
                                         if (StringUtils.containsIgnoreCase(orderStr, "up to")) {
                                             order.auxPrice(getAmountAfter(orderStr, "up to"));
-//                                            for (int z = j; z < words.length; z++)
-//                                                if (words[z].equals("up") && words[z+1].equals("to")) {
-//                                                    order.auxPrice(new Double(words[z+2]));
-//                                                    break;
-//                                                }
                                         } else { // Look for the next $amount in the Order String                                         
                                             for (int z = j; z < words.length; z++) {
                                                 if (NumberUtils.isCreatable(words[z])) {
@@ -349,7 +335,6 @@ public class ImapController {
                                             }
                                         }
                                     }
-
                                     break; // don't need to process any more words
                                 }
                             }
@@ -395,24 +380,10 @@ public class ImapController {
 
                                 if (StringUtils.containsIgnoreCase(block, "assuming")) {
                                     order.lmtPrice(getAmountAfter(block, "ssuming"));
-                                } //                                    sb = new StringBuilder(StringUtils.substringAfter(block, "ssuming")); // avoid capital/lowercase issue for 'A' 
-                                //                                    while (linesItr.hasNext()) {                                                
-                                //                                        line = linesItr.next();
-                                //                                        logger.info("Line : {}", line);
-                                //                                        if (StringUtils.containsIgnoreCase(line, "assuming")) {
-                                //                                    } 
-                                else {
+                                } else {
                                     Double askPrice = getAmountAfter(orderStr, "ask price");
                                     Double bidPrice = getAmountAfter(orderStr, "bid price");
                                     order.lmtPrice(bidPrice + (askPrice - bidPrice) / 2);
-//                                    if (StringUtils.containsIgnoreCase(block, "near"))
-//                                    sb = new StringBuilder(StringUtils.substringAfter(block, "near"));                                  
-
-//                                sb = new StringBuilder(StringUtils.substringAfter(line, "ssuming")); // avoid capital/lowercase issue for 'A' 
-//                                sb.append(" "); // so last word and first word of next string don't merge
-//                                if (linesItr.hasNext()) {
-//                                    line = linesItr.next(); // lines[lnctr++];
-//                                    sb.append(line); // "assuming a $limitPrice .." may span more than 1 line
                                 }
                             } else {
                                 order.lmtPrice(order.auxPrice()); // same thing for non Rickard's subs
@@ -526,9 +497,6 @@ public class ImapController {
                 String content = (String) part.getContent();
                 new Thread(() -> {
                     Thread.currentThread().setName("EmailContentProcessThread");
-//                    if (sub == null)
-//                        processEmailMsgContent(content);
-//                    else // process TV message
                     processEmailMsgContent(content, sub);
                 }).start();
                 break;
@@ -544,7 +512,7 @@ public class ImapController {
         String personal = StringUtils.replacePattern(email.getPersonal(), "[^a-zA-Z0-9.\\ ]+", ""); // to remove ambiguous ' or ’ 
         logger.info("Email arrived from : [{}] <{}> with Subject: {}", personal, address, subject);
 
-//        Test (subject) for TradingView email
+//      Subject for TradingView email
         if (subject.startsWith("TradingView Alert")) {
             processEmailMsgSubject(subject);
         } else { // if (address.equals(m_advisorfirm_email)) {
@@ -558,20 +526,6 @@ public class ImapController {
                         || StringUtils.containsIgnoreCase(subject, "%"))) {
 
                     processEmailMsgMultipart(msg, sub);
-                    //                Multipart multiPart = (Multipart) msg.getContent();
-                    //
-                    //                for (int i = 0; i < multiPart.getCount(); i++) {
-                    //                    MimeBodyPart part = (MimeBodyPart) multiPart.getBodyPart(i);
-                    //                    if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) {
-                    //                        logger.info("Part is attachment : {}", part.getDisposition());
-                    //                    } else {
-                    //                        String content = (String) part.getContent();
-                    //                        new Thread(() -> {
-                    //                            Thread.currentThread().setName("EmailContentProcessThread");
-                    //                            processEmailMsgContent(content, sub);
-                    //                        }).start();break;
-                    //                    }
-                    //                }                                            
                     return;
                 }
             }
